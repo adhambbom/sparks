@@ -433,48 +433,73 @@ export default function GameScreen() {
               </PixelText>
             </View>
           ))}
-          {/* Giant Cyber Castle V2.1 — multi-tile painted overlay (rows 0-3, cols 7-13) */}
+          {/* Giant Cyber Castle V2.1 — multi-tile painted overlay (rows 0-3, cols 6-14) */}
           <Image
             source={{ uri: SPRITE_ASSETS.cyberCastle }}
             style={{
               position: 'absolute',
-              left: 7 * TILE - 8,
-              top: 0 * TILE - 14,
-              width: 7 * TILE + 16,
-              height: 4 * TILE + 14,
+              left: 6 * TILE - 16,
+              top: 0 * TILE - 30,
+              width: 9 * TILE + 32,    // ~5 tile wide ×  spans cols 6-14
+              height: 5 * TILE + 30,   // 5-tile tall majestic structure
+              backgroundColor: 'transparent',
               zIndex: 2,
             }}
             resizeMode="contain"
           />
-          {/* Sapphire Core, Spike Pad, and Destructible Barrel image overlays */}
+          {/* Sapphire Core, Spike Pad, and Destructible Barrel image overlays (1.8x scaled) */}
           {ACADEMY_MAP.flatMap((row, y) =>
             row.map((cell, x) => {
               if (cell === 9) {
+                const W = TILE * 1.8, H = TILE * 2.0;
                 return (
                   <Image
                     key={`core-${x}-${y}`}
                     source={{ uri: SPRITE_ASSETS.sapphireCore }}
-                    style={{ position: 'absolute', left: x * TILE - 6, top: y * TILE - 14, width: TILE + 12, height: TILE + 18, zIndex: 4 }}
+                    style={{
+                      position: 'absolute',
+                      left: x * TILE + (TILE - W) / 2,
+                      top: y * TILE + (TILE - H) / 2 - 8,
+                      width: W, height: H,
+                      backgroundColor: 'transparent',
+                      zIndex: 4,
+                    }}
                     resizeMode="contain"
                   />
                 );
               }
               if (cell === 8) {
+                const W = TILE * 1.8, H = TILE * 1.4;
                 return (
                   <Image
                     key={`spike-${x}-${y}`}
                     source={{ uri: SPRITE_ASSETS.spikePad }}
-                    style={{ position: 'absolute', left: x * TILE - 4, top: y * TILE - 4, width: TILE + 8, height: TILE + 8, zIndex: 3 }}
+                    style={{
+                      position: 'absolute',
+                      left: x * TILE + (TILE - W) / 2,
+                      top: y * TILE + (TILE - H) / 2 + 2,
+                      width: W, height: H,
+                      backgroundColor: 'transparent',
+                      zIndex: 3,
+                    }}
                     resizeMode="contain"
                   />
                 );
               }
               if (cell === 14 && !brokenBarrels.has(`${x},${y}`)) {
+                const W = TILE * 1.4, H = TILE * 1.8;
                 return (
                   <Image
                     key={`barrel-${x}-${y}`}
                     source={{ uri: SPRITE_ASSETS.barrel }}
-                    style={{ position: 'absolute', left: x * TILE, top: y * TILE - 6, width: TILE, height: TILE + 6, zIndex: 5 }}
+                    style={{
+                      position: 'absolute',
+                      left: x * TILE + (TILE - W) / 2,
+                      top: y * TILE + (TILE - H) / 2 - 6,
+                      width: W, height: H,
+                      backgroundColor: 'transparent',
+                      zIndex: 5,
+                    }}
                     resizeMode="contain"
                   />
                 );
@@ -493,28 +518,30 @@ export default function GameScreen() {
               </PixelText>
             </View>
           ))}
-          {/* Roaming enemies — Clockwork Scouts and Juggernaut mini-boss */}
+          {/* Roaming enemies — Clockwork Scouts (1.5x) and Juggernaut mini-boss (2x) */}
           {roamers.map((r) => {
             const isBoss = r.boss;
             const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
-            const size = isBoss ? TILE + 14 : TILE + 4;
+            // Scouts: 1.5x tile size; Juggernaut: 2.0x tile size
+            const W = isBoss ? TILE * 2.0 : TILE * 1.5;
+            const H = isBoss ? TILE * 2.0 : TILE * 1.5;
             return (
               <View
                 key={r.uid}
                 style={[
-                  styles.roamer,
                   {
-                    left: r.x * TILE + (TILE - size) / 2,
-                    top: r.y * TILE + (TILE - size) / 2 - 4,
-                    width: size,
-                    height: size,
+                    position: 'absolute',
+                    left: r.x * TILE + (TILE - W) / 2,
+                    top: r.y * TILE + (TILE - H) / 2 - 6,
+                    width: W,
+                    height: H,
                     zIndex: isBoss ? 8 : 7,
                   },
                 ]}
               >
                 <Image
                   source={{ uri: spriteUri }}
-                  style={{ width: size, height: size }}
+                  style={{ width: W, height: H, backgroundColor: 'transparent' }}
                   resizeMode="contain"
                 />
                 <View style={[
@@ -525,15 +552,26 @@ export default function GameScreen() {
               </View>
             );
           })}
-          {/* Player sprite — mini-ADHAMB pink-armored cyborg (AI-generated PNG) */}
-          <Image
-            source={{ uri: SPRITE_ASSETS.player }}
-            style={[
-              styles.playerSprite,
-              { left: posRef.current.px - 22, top: posRef.current.py - 30 },
-            ]}
-            resizeMode="contain"
-          />
+          {/* Player sprite — mini-ADHAMB pink-armored cyborg, scaled 2.5x */}
+          {(() => {
+            const W = TILE * 1.7;       // ~65px wide
+            const H = TILE * 2.4;       // ~91px tall (sprite aspect ~1:1.4 from 308x556)
+            return (
+              <Image
+                source={{ uri: SPRITE_ASSETS.player }}
+                style={{
+                  position: 'absolute',
+                  left: posRef.current.px - W / 2,
+                  top: posRef.current.py - H * 0.7,
+                  width: W,
+                  height: H,
+                  backgroundColor: 'transparent',
+                  zIndex: 10,
+                }}
+                resizeMode="contain"
+              />
+            );
+          })()}
         </View>
       </View>
 
