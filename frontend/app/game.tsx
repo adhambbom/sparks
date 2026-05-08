@@ -18,7 +18,7 @@ const TILE = 38;
 const SPEED = 4; // pixels per frame
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
 const ROAM_TICK_MS = 2000; // every 2 seconds (per spec)
-const MAX_ROAMERS = 6;
+const MAX_ROAMERS = 3;
 const CHASE_RADIUS = 4;
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -350,7 +350,7 @@ export default function GameScreen() {
   }
 
   const camX = posRef.current.px - SW / 2;
-  const camY = posRef.current.py - SH / 2 - 80;
+  const camY = posRef.current.py - SH / 2 - 110;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -383,6 +383,24 @@ export default function GameScreen() {
               </PixelText>
             </View>
           ))}
+          {/* Roaming enemies */}
+          {roamers.map((r) => {
+            const enemy = (ENEMIES as any)[r.enemyId];
+            return (
+              <View
+                key={r.uid}
+                style={[
+                  styles.roamer,
+                  { left: r.x * TILE + 2, top: r.y * TILE + 2 },
+                ]}
+              >
+                <View style={[styles.roamerBg, r.chasing && styles.roamerBgChasing]}>
+                  <Sprite index={enemy?.spriteIndex ?? 0} size={28} />
+                </View>
+                <View style={[styles.alertDot, r.chasing && styles.alertDotChasing]} />
+              </View>
+            );
+          })}
           {/* Player sprite - layered cyborg look */}
           <View style={[
             styles.player,
@@ -403,49 +421,56 @@ export default function GameScreen() {
         </View>
       </View>
 
-      {/* Top HUD */}
+      {/* Top HUD - status row + action shortcuts row */}
       <View style={styles.hud} testID="hud-status">
-        <View style={styles.hudLeft}>
-          <PixelText size={10} color={COLORS.neonCyan} bold>{state.player.name.toUpperCase()}</PixelText>
-          <PixelText size={7} color={COLORS.textDim} style={{ marginTop: 2 }}>LV{state.player.level} · S{state.player.syncLevel}</PixelText>
+        <View style={styles.hudStatusRow}>
+          <View style={styles.hudLeft}>
+            <PixelText size={10} color={COLORS.neonCyan} bold>{state.player.name.toUpperCase()}</PixelText>
+            <PixelText size={7} color={COLORS.textDim} style={{ marginTop: 2 }}>LV{state.player.level} · S{state.player.syncLevel}</PixelText>
+          </View>
+          <View style={styles.hudBars}>
+            <StatBar value={state.player.hp} max={state.player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={110} height={8} showText={false} />
+            <View style={{ height: 2 }} />
+            <StatBar value={state.player.mp} max={state.player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={110} height={8} showText={false} />
+          </View>
+          <View style={styles.hudRight}>
+            <PixelText size={9} color={COLORS.neonYellow} bold>{state.player.gold}G</PixelText>
+            <PixelText size={7} color={COLORS.xp} style={{ marginTop: 2 }}>XP{state.player.xp}/{state.player.xpToNext}</PixelText>
+          </View>
         </View>
-        <View style={styles.hudBars}>
-          <StatBar value={state.player.hp} max={state.player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={110} height={8} showText={false} />
-          <View style={{ height: 2 }} />
-          <StatBar value={state.player.mp} max={state.player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={110} height={8} showText={false} />
+        <View style={styles.hudShortcutsRow}>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.neonCyan }]}
+            onPress={() => { sfx.click(); router.push('/inventory'); }}
+            testID="hud-inventory"
+          >
+            <PixelText size={9} color={COLORS.neonCyan} bold>BAG</PixelText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.neonMagenta }]}
+            onPress={() => { sfx.click(); router.push('/skills'); }}
+            testID="hud-skills"
+          >
+            <PixelText size={9} color={COLORS.neonMagenta} bold>SKILLS</PixelText>
+            {state.player.skillPoints > 0 && (
+              <View style={styles.spDot}><PixelText size={8} color="#000" bold>{state.player.skillPoints}</PixelText></View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.neonYellow }]}
+            onPress={() => { sfx.click(); router.push('/store'); }}
+            testID="hud-store"
+          >
+            <PixelText size={9} color={COLORS.neonYellow} bold>STORE</PixelText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.textDim }]}
+            onPress={() => { sfx.click(); setPauseOpen(true); }}
+            testID="hud-menu"
+          >
+            <PixelText size={9} color={COLORS.text} bold>MENU</PixelText>
+          </TouchableOpacity>
         </View>
-        <View style={styles.hudRight}>
-          <PixelText size={9} color={COLORS.neonYellow} bold>{state.player.gold}G</PixelText>
-          <PixelText size={7} color={COLORS.xp} style={{ marginTop: 2 }}>XP{state.player.xp}/{state.player.xpToNext}</PixelText>
-        </View>
-      </View>
-
-      {/* Top action shortcuts */}
-      <View style={styles.topShortcuts}>
-        <TouchableOpacity
-          style={[styles.shortcutBtn, { borderColor: COLORS.neonCyan }]}
-          onPress={() => { sfx.click(); router.push('/inventory'); }}
-          testID="hud-inventory"
-        >
-          <PixelText size={10} color={COLORS.neonCyan} bold>BAG</PixelText>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.shortcutBtn, { borderColor: COLORS.neonMagenta }]}
-          onPress={() => { sfx.click(); router.push('/skills'); }}
-          testID="hud-skills"
-        >
-          <PixelText size={10} color={COLORS.neonMagenta} bold>SKILLS</PixelText>
-          {state.player.skillPoints > 0 && (
-            <View style={styles.spDot}><PixelText size={8} color="#000" bold>{state.player.skillPoints}</PixelText></View>
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.shortcutBtn, { borderColor: COLORS.neonYellow }]}
-          onPress={() => { sfx.click(); router.push('/store'); }}
-          testID="hud-store"
-        >
-          <PixelText size={10} color={COLORS.neonYellow} bold>STORE</PixelText>
-        </TouchableOpacity>
       </View>
 
       {hint ? (
@@ -633,13 +658,13 @@ const styles = StyleSheet.create({
     width: 10, height: 10,
   },
   topShortcuts: {
-    position: 'absolute', top: 120, right: 8,
-    flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 260,
-    zIndex: 48,
+    // legacy - kept for backward compat but no longer used (shortcuts now live inside HUD)
+    display: 'none',
   },
   shortcutBtn: {
     backgroundColor: 'rgba(10,10,20,0.85)',
-    borderWidth: 2, paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 2, paddingHorizontal: 10, paddingVertical: 5,
+    minWidth: 56, alignItems: 'center',
   },
   spDot: {
     position: 'absolute', top: -6, right: -6,
@@ -650,12 +675,22 @@ const styles = StyleSheet.create({
   },
   hud: {
     position: 'absolute', top: 0, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     backgroundColor: 'rgba(8,8,18,0.95)',
     borderBottomWidth: 2, borderBottomColor: COLORS.neonCyan,
-    paddingTop: 36, paddingBottom: 6, paddingHorizontal: 10, gap: 8,
+    paddingTop: 36, paddingBottom: 6, paddingHorizontal: 10,
     shadowColor: COLORS.neonCyan, shadowOpacity: 0.4, shadowRadius: 6,
     zIndex: 50,
+  },
+  hudStatusRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    gap: 8,
+  },
+  hudShortcutsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 4,
   },
   objective: {
     position: 'absolute', top: 78, left: 12, right: 12,
