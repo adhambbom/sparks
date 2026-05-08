@@ -27,17 +27,43 @@ type Dialog = { name: string; lines: string[]; line: number } | null;
 type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: boolean; boss?: boolean };
 
 function isFloor(x: number, y: number, brokenBarrels?: Set<string>): boolean {
-  if (y < 0 || y >= ACADEMY_MAP.length) return false;
-  if (x < 0 || x >= ACADEMY_MAP[0].length) return false;
-  const t = ACADEMY_MAP[y][x];
-  // Walls (1), debris (11), castle walls (12) always block.
-  // Barrels (14) block unless they've been destroyed.
-  if (t === 1 || t === 11 || t === 12) return false;
-  if (t === 14 && !(brokenBarrels && brokenBarrels.has(`${x},${y}`))) return false;
-  return true;
+  // Backward-compatible delegate to canMoveTo (used by spawn helpers)
+  return canMoveTo(x, y, brokenBarrels ?? new Set<string>());
 }
 
-// Tiles within 1-tile radius of any NPC are reserved — no enemies/barrels/etc. allowed.
+// ──────────────────────────────────────────────────────────
+// Collision constants — tile types that block player movement.
+// The player sprite is 2.4× TILE tall, so the HEAD renders over the
+// row above the feet (zIndex: 9999 keeps it on top of wall tiles).
+// We only check collision at FEET-level (the destination tile coords).
+// ──────────────────────────────────────────────────────────
+const SOLID_TILE_TYPES = new Set<number>([
+  1,   // outer wall
+  11,  // immovable debris
+  12,  // castle stone wall (interior)
+]);
+
+/**
+ * Returns true if the player can step onto (tx, ty).
+ * Performs feet-level collision: walls / debris / castle stone always block;
+ * intact barrels (type 14) block until smashed and added to brokenBarrels.
+ */
+function canMoveTo(tx: number, ty: number, brokenBarrels: Set<string>): boolean {
+  // 1. Bounds check
+  if (ty < 0 || ty >= ACADEMY_MAP.length) return false;
+  if (tx < 0 || tx >= ACADEMY_MAP[0].length) return false;
+
+  // 2. Read destination tile type
+  const targetType = ACADEMY_MAP[ty][tx];
+
+  // 3. Static solid wall family
+  if (SOLID_TILE_TYPES.has(targetType)) return false;
+
+  // 4. Intact destructible barrel = solid; smashed barrel = walkable
+  if (targetType === 14 && !brokenBarrels.has(`${tx},${ty}`)) return false;
+
+  return true;
+}
 function isNearNpc(x: number, y: number): boolean {
   for (const id of Object.keys(NPCS)) {
     const npc = NPCS[id];
@@ -233,20 +259,13 @@ export default function GameScreen() {
           px: posRef.current.px + dx * SPEED,
           py: posRef.current.py + dy * SPEED,
         };
+        // Feet-level collision: floor of pixel-pos = the tile the feet stand on.
+        // The player sprite (~2.4× TILE tall) renders ABOVE this tile via zIndex,
+        // so the head naturally overlays the wall row above without collision.
         const tx = Math.floor(np.px / TILE);
         const ty = Math.floor(np.py / TILE);
-        // Bounds + wall/castle/debris/barrel collision
-        const targetTile = (ty >= 0 && ty < ACADEMY_MAP.length && tx >= 0 && tx < ACADEMY_MAP[0].length)
-          ? ACADEMY_MAP[ty][tx] : 1;
-        const isBarrelStanding = targetTile === 14 && !brokenBarrelsRef.current.has(`${tx},${ty}`);
-        if (
-          ty >= 0 && ty < ACADEMY_MAP.length &&
-          tx >= 0 && tx < ACADEMY_MAP[0].length &&
-          targetTile !== 1 &&
-          targetTile !== 11 &&
-          targetTile !== 12 &&
-          !isBarrelStanding
-        ) {
+
+        if (canMoveTo(tx, ty, brokenBarrelsRef.current)) {
           posRef.current = np;
           // Check tile change
           if (tx !== lastTileRef.current.x || ty !== lastTileRef.current.y) {
@@ -257,7 +276,6 @@ export default function GameScreen() {
               const hit = roamersRef.current.find(r => r.x === tx && r.y === ty);
               if (hit) {
                 engagingRef.current = true;
-                // remove engaged roamer (defeated optimistically; respawns on focus if needed)
                 const remaining = roamersRef.current.filter(r => r.uid !== hit.uid);
                 roamersRef.current = remaining;
                 setRoamers(remaining);
