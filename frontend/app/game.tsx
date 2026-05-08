@@ -3,6 +3,7 @@ import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, Tou
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
+import BrickWall from '../src/components/BrickWall';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -474,7 +475,7 @@ export default function GameScreen() {
           {ACADEMY_MAP.map((row, y) => (
             <View key={y} style={{ flexDirection: 'row' }}>
               {row.map((cell, x) => (
-                <Tile key={`${x}-${y}`} type={cell} />
+                <Tile key={`${x}-${y}`} type={cell} x={x} y={y} />
               ))}
             </View>
           ))}
@@ -748,11 +749,20 @@ export default function GameScreen() {
   );
 }
 
-function Tile({ type }: { type: number }) {
+function Tile({ type, x, y }: { type: number; x: number; y: number }) {
+  // Wall tiles (1 = outer wall, 12 = castle stone) → procedural BrickWall texture.
+  // Variant uses tile coords so adjacent tiles get subtly different stains/shading.
+  if (type === 1 || type === 12) {
+    return (
+      <View style={[styles.tile, { width: TILE, height: TILE }]}>
+        <BrickWall size={TILE} variant={(x * 31 + y * 17) % 7} />
+      </View>
+    );
+  }
+
   let bg = COLORS.bgDark;
   let inner: any = null;
   if (type === 0) bg = '#1e1e2e'; // floor - dark stone
-  else if (type === 1) bg = '#2a2438'; // wall - stone
   else if (type === 5) { bg = '#2a1a3e'; inner = <PixelText size={14} color={COLORS.neonYellow} bold>$</PixelText>; }
   else if (type === 6) { bg = '#1a2a3e'; inner = <PixelText size={14} color={COLORS.neonMagenta} bold>★</PixelText>; }
   else if (type === 4) { bg = '#3e1a1a'; inner = <PixelText size={14} color={COLORS.neonRed} bold>↑</PixelText>; }
@@ -762,13 +772,10 @@ function Tile({ type }: { type: number }) {
   else if (type === 9) { bg = '#1e1e2e'; }  // sapphire core - floor bg, image overlay
   else if (type === 10) { bg = '#1a3a3a'; inner = <PixelText size={14} color={COLORS.neonGreen} glow bold>⚙</PixelText>; }
   else if (type === 11) { bg = '#1a1418'; inner = <PixelText size={14} color={COLORS.textDim} bold>▓▓</PixelText>; }
-  else if (type === 12) { bg = '#1a1228'; }  // castle stone wall — dark base; pattern overlay added below
   else if (type === 13) { bg = '#26183a'; inner = <PixelText size={12} color={COLORS.neonMagenta} glow bold>♦</PixelText>; }  // throne chamber banner
   else if (type === 14) { bg = '#1e1e2e'; }  // barrel sits on floor; image overlay handles visual
   return (
     <View style={[styles.tile, { backgroundColor: bg, width: TILE, height: TILE }]}>
-      {type === 1 && <View style={styles.wallInner} />}
-      {type === 12 && <View style={styles.castleWallInner} />}
       {inner}
     </View>
   );
