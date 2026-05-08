@@ -8,6 +8,7 @@ import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
 import { Sprite } from '../src/components/Sprite';
 import { useGame } from '../src/contexts/GameContext';
+import { sfx } from '../src/utils/audio';
 
 type ActionPanel = 'main' | 'skills' | 'items';
 
