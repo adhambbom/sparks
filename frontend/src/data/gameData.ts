@@ -499,26 +499,50 @@ export function xpForNextLevel(level: number): number {
 // ============================================================
 // ACADEMY MAP - 20x15 grid
 // 0=floor, 1=wall, 2=trial-door (boss), 3=NPC, 4=arena exit, 5=store, 6=skill chamber, 7=final-trial-door
-// 8=spike pad (-10 HP), 9=Sapphire Core, 10=Power Console, 11=debris (collision)
-// 12=castle wall (cyber-stone, blocks), 13=castle banner (decoration on floor, walkable)
-// 14=destructible barrel (blocks, destroyed by B-button)
+// ============================================================
+// CASTLE INTERIOR DUNGEON MAP - 20x15 grid
+// We are now INSIDE Castle V2.1. Stone walls (type 12) form modular corridors and rooms.
+// The Sapphire Core sits in the deeply guarded central throne chamber at the top.
+//
+// Tile codes:
+// 0=stone floor, 1=outer-wall (legacy, unused), 2=trial-door (boss), 3=NPC,
+// 4=arena exit, 5=merchant store, 6=skill chamber, 7=final-trial-door,
+// 8=spike pad (-10 HP), 9=Sapphire Core (objective), 10=Power Console,
+// 11=debris (collision), 12=castle stone wall (blocks),
+// 13=castle banner (decoration on floor, walkable),
+// 14=destructible barrel (blocks until smashed with B)
 // ============================================================
 export const ACADEMY_MAP: number[][] = [
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,0,12,12,12,12,12,12,12,0,0,0,0,0,1],
-  [1,0,5,0,0,10,0,12,13,0,0,0,13,12,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,12,0,0,0,0,0,12,0,0,0,11,0,1],
-  [1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1],
-  [1,0,0,0,0,0,14,0,0,0,9,0,0,0,14,0,0,0,0,1],
-  [1,0,3,0,0,0,3,0,0,0,0,0,0,0,3,0,2,0,7,1],
-  [1,0,0,0,0,0,0,0,8,1,0,1,0,14,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
-  [1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],
-  [1,0,0,0,0,0,11,0,0,0,0,0,0,0,8,0,14,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,6,0,0,0,4,0,1],
-  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  // Row 0  — north outer wall
+  [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12],
+  // Row 1  — upper hall (behind throne chamber)
+  [12, 0, 0, 0, 0, 0, 0,12,12,12,12,12, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 2  — throne chamber rear (banners flanking core)
+  [12, 0, 0, 0, 0, 0, 0,12,13, 0,13,12, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 3  — THRONE CHAMBER with Sapphire Core at center (9,3)
+  [12, 0, 0, 0, 0, 0, 0,12, 0, 9, 0,12, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 4  — throne chamber inner corridor (entrance from below)
+  [12, 0, 0, 0, 0, 0, 0,12, 0, 0, 0,12, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 5  — south wall of throne chamber + power console + debris
+  [12, 0, 0,10, 0, 0, 0,12,12, 0,12,12, 0, 0, 0,11, 0, 0, 0,12],
+  // Row 6  — main corridor with NPCs (Orion, Jax, Lyra) + boss door
+  [12, 0, 3, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 2, 0, 0,12],
+  // Row 7  — patrol corridor with barrels guarding the path
+  [12, 0, 0, 0,14, 0, 0, 0, 0, 0, 0, 0, 0, 0,14, 0, 0, 0, 0,12],
+  // Row 8  — guarded approach: dual spike pads
+  [12, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 9  — choke-point corridor (only 3 paths through)
+  [12,12,12, 0,12,12,12,12, 0, 0, 0,12,12,12,12, 0,12,12,12,12],
+  // Row 10 — open hallway
+  [12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 11 — merchant + skill chamber + barrels & debris
+  [12, 0, 5, 0, 0, 0,11, 0,14, 0,14, 0,11, 0, 0, 0, 6, 0, 0,12],
+  // Row 12 — open lower corridor
+  [12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 13 — entrance hall + arena door + final trial door
+  [12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 7,12],
+  // Row 14 — south outer wall
+  [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12],
 ];
 
 export const NPCS: Record<string, { name: string; x: number; y: number; lines: string[] }> = {

@@ -87,11 +87,17 @@ export default function GameScreen() {
         router.replace('/character-create');
         return;
       }
-      const tx = s.world.position.x;
-      const ty = s.world.position.y;
+      let tx = s.world.position.x;
+      let ty = s.world.position.y;
+      // Safety: if saved checkpoint is now inside a wall (map redesign), respawn at entrance hall
+      if (!isFloor(tx, ty)) {
+        tx = 1;
+        ty = 13; // entrance hall
+        try { await setPosition(tx, ty); } catch {}
+      }
       posRef.current = { px: tx * TILE + TILE / 2, py: ty * TILE + TILE / 2 };
       lastTileRef.current = { x: tx, y: ty };
-      // Spawn 3 scout roamers + 1 Juggernaut mini-boss patrolling near castle
+      // Spawn 3 scout roamers + 1 Juggernaut mini-boss patrolling the corridors
       const occupied = new Set<string>();
       const placed: Roamer[] = [];
       // 3 Clockwork Scouts (random walkable spots)
@@ -101,11 +107,11 @@ export default function GameScreen() {
         occupied.add(`${spot.x},${spot.y}`);
         placed.push({ uid: `scout_${Date.now()}_${i}`, enemyId: 'tinkerer_drone', x: spot.x, y: spot.y });
       }
-      // 1 Juggernaut mini-boss near the castle entrance (around row 5, cols 4-15)
+      // 1 Juggernaut mini-boss patrolling the throne approach corridor (rows 5-9, mid columns)
       let jugSpot: { x: number; y: number } | null = null;
-      for (let attempt = 0; attempt < 30; attempt++) {
-        const x = 4 + Math.floor(Math.random() * 12);
-        const y = 5;
+      for (let attempt = 0; attempt < 60; attempt++) {
+        const x = 6 + Math.floor(Math.random() * 8);
+        const y = 5 + Math.floor(Math.random() * 5);
         if (isFloor(x, y) && !occupied.has(`${x},${y}`) && !(x === tx && y === ty)) {
           jugSpot = { x, y };
           break;
@@ -433,20 +439,8 @@ export default function GameScreen() {
               </PixelText>
             </View>
           ))}
-          {/* Giant Cyber Castle V2.1 — multi-tile painted overlay (rows 0-3, cols 6-14) */}
-          <Image
-            source={{ uri: SPRITE_ASSETS.cyberCastle }}
-            style={{
-              position: 'absolute',
-              left: 6 * TILE - 16,
-              top: 0 * TILE - 30,
-              width: 9 * TILE + 32,    // ~5 tile wide ×  spans cols 6-14
-              height: 5 * TILE + 30,   // 5-tile tall majestic structure
-              backgroundColor: 'transparent',
-              zIndex: 2,
-            }}
-            resizeMode="contain"
-          />
+          {/* No giant castle Image overlay — we are now INSIDE Castle V2.1.
+              Stone walls (type 12) form the corridors and rooms; banners (13) decorate the throne chamber. */}
           {/* Sapphire Core, Spike Pad, and Destructible Barrel image overlays (1.8x scaled) */}
           {ACADEMY_MAP.flatMap((row, y) =>
             row.map((cell, x) => {
@@ -701,12 +695,13 @@ function Tile({ type }: { type: number }) {
   else if (type === 9) { bg = '#1e1e2e'; }  // sapphire core - floor bg, image overlay
   else if (type === 10) { bg = '#1a3a3a'; inner = <PixelText size={14} color={COLORS.neonGreen} glow bold>⚙</PixelText>; }
   else if (type === 11) { bg = '#1a1418'; inner = <PixelText size={14} color={COLORS.textDim} bold>▓▓</PixelText>; }
-  else if (type === 12) { bg = '#1a1428'; }  // castle footprint - dark, big castle image overlays this
-  else if (type === 13) { bg = '#1a1428'; }  // castle interior floor
+  else if (type === 12) { bg = '#1a1228'; }  // castle stone wall — dark base; pattern overlay added below
+  else if (type === 13) { bg = '#26183a'; inner = <PixelText size={12} color={COLORS.neonMagenta} glow bold>♦</PixelText>; }  // throne chamber banner
   else if (type === 14) { bg = '#1e1e2e'; }  // barrel sits on floor; image overlay handles visual
   return (
     <View style={[styles.tile, { backgroundColor: bg, width: TILE, height: TILE }]}>
       {type === 1 && <View style={styles.wallInner} />}
+      {type === 12 && <View style={styles.castleWallInner} />}
       {type === 0 && <View style={styles.floorDot} />}
       {inner}
     </View>
