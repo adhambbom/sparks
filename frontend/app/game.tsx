@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
 import ConcreteFloor from '../src/components/ConcreteFloor';
+import WalkingLegs from '../src/components/WalkingLegs';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -629,8 +630,8 @@ export default function GameScreen() {
               </View>
             );
           })}
-          {/* Roaming enemies — Clockwork Scouts (1.4x) and Juggernaut mini-boss (1.7x).
-              Each enemy bobs/sways gently to fake a walking/scuttling animation. */}
+          {/* Roaming enemies — Clockwork Scouts (4-legged scuttle) and Juggernaut mini-boss.
+              Each enemy has a procedurally-animated leg overlay that visibly steps. */}
           {roamers.map((r) => {
             const isBoss = r.boss;
             const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
@@ -638,9 +639,16 @@ export default function GameScreen() {
             const H = isBoss ? TILE * 1.7 : TILE * 1.4;
             // Per-roamer phase based on uid + animTick → asynchronous gait
             const uidHash = r.uid.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-            const phase = (animTick + uidHash) * 0.6;
-            const bob = Math.abs(Math.sin(phase)) * (isBoss ? 1.5 : 2); // up-down step
-            const sway = Math.sin(phase * 0.5) * (isBoss ? 2 : 4);       // left-right sway angle
+            const tickPhase = animTick + uidHash;
+            const swingPhase = tickPhase * 0.6;
+            const bob = Math.abs(Math.sin(swingPhase)) * (isBoss ? 1.5 : 2);
+            const sway = Math.sin(swingPhase * 0.5) * (isBoss ? 2 : 4);
+            // Roamers are always "moving" — alternate frames every 200ms (juggernaut: 300ms)
+            const stepDivider = isBoss ? 3 : 2;
+            const legFrame: 0 | 1 | 2 = ((Math.floor(tickPhase / stepDivider) % 2) === 0 ? 1 : 2);
+            // Body sprite occupies top 65% of container; legs fill the bottom 35%
+            const bodyH = H * 0.65;
+            const legsH = H * 0.40;     // slight overlap with body to hide seam
             return (
               <View
                 key={r.uid}
@@ -651,44 +659,57 @@ export default function GameScreen() {
                   width: W,
                   height: H,
                   zIndex: isBoss ? 6 : 5,
+                  transform: [
+                    { translateY: -bob },
+                    { rotate: `${sway}deg` },
+                  ],
                 }}
                 pointerEvents="none"
               >
-                <Image
-                  source={{ uri: spriteUri }}
-                  style={{
-                    width: W,
-                    height: H,
-                    backgroundColor: 'transparent',
-                    transform: [
-                      { translateY: -bob },
-                      { rotate: `${sway}deg` },
-                    ],
-                  }}
-                  resizeMode="contain"
-                />
+                {/* Body sprite — clipped to top 65% so original static legs are hidden */}
+                <View style={{ width: W, height: bodyH, overflow: 'hidden' }}>
+                  <Image
+                    source={{ uri: spriteUri }}
+                    style={{ width: W, height: H, backgroundColor: 'transparent' }}
+                    resizeMode="contain"
+                  />
+                </View>
+                {/* Animated legs overlay */}
+                <View style={{ position: 'absolute', left: 0, top: bodyH - legsH * 0.15, width: W, height: legsH }}>
+                  <WalkingLegs
+                    width={W}
+                    height={legsH}
+                    frame={legFrame}
+                    style={isBoss ? 'juggernaut' : 'scout'}
+                  />
+                </View>
               </View>
             );
           })}
           {/* Player sprite — mini-ADHAMB, ALWAYS on top (zIndex 9999).
-              Walking animation only plays when actively moving. */}
+              Body + animated legs combined; legs alternate frames only while moving. */}
           {(() => {
             const W = TILE * 1.7;
             const H = TILE * 2.4;
             const isMoving = dirRef.current.x !== 0 || dirRef.current.y !== 0;
             const phase = animTick * 0.9;
             const bob = isMoving ? Math.abs(Math.sin(phase)) * 3 : 0;
-            const sway = isMoving ? Math.sin(phase * 0.5) * 3 : 0;
+            const sway = isMoving ? Math.sin(phase * 0.5) * 2 : 0;
+            // Idle = frame 0 (both legs together); moving = alternate 1 ↔ 2 every 200ms
+            const legFrame: 0 | 1 | 2 = isMoving
+              ? ((Math.floor(animTick / 2) % 2) === 0 ? 1 : 2)
+              : 0;
+            // Body fills top ~70%; legs fill bottom 35% (overlap by 5%)
+            const bodyH = H * 0.70;
+            const legsH = H * 0.35;
             return (
-              <Image
-                source={{ uri: SPRITE_ASSETS.player }}
+              <View
                 style={{
                   position: 'absolute',
                   left: posRef.current.px - W / 2,
                   top: posRef.current.py - H * 0.7,
                   width: W,
                   height: H,
-                  backgroundColor: 'transparent',
                   zIndex: 9999,
                   transform: [
                     { translateY: -bob },
@@ -696,8 +717,26 @@ export default function GameScreen() {
                   ],
                   ...(Platform.OS === 'android' ? { elevation: 30 } : {}),
                 }}
-                resizeMode="contain"
-              />
+                pointerEvents="none"
+              >
+                {/* Body — clip bottom 30% so static sprite-legs are hidden */}
+                <View style={{ width: W, height: bodyH, overflow: 'hidden' }}>
+                  <Image
+                    source={{ uri: SPRITE_ASSETS.player }}
+                    style={{ width: W, height: H, backgroundColor: 'transparent' }}
+                    resizeMode="contain"
+                  />
+                </View>
+                {/* Animated legs */}
+                <View style={{ position: 'absolute', left: 0, top: bodyH - legsH * 0.15, width: W, height: legsH }}>
+                  <WalkingLegs
+                    width={W}
+                    height={legsH}
+                    frame={legFrame}
+                    style="human"
+                  />
+                </View>
+              </View>
             );
           })()}
         </View>
