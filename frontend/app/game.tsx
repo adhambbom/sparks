@@ -54,6 +54,10 @@ export default function GameScreen() {
   // pixel position; tile = floor(p/TILE)
   const posRef = useRef({ px: 0, py: 0 });
   const [renderTick, setRenderTick] = useState(0);
+  // Roaming enemies state
+  const [roamers, setRoamers] = useState<Roamer[]>([]);
+  const roamersRef = useRef<Roamer[]>([]);
+  const engagingRef = useRef(false);
 
   useFocusEffect(
     React.useCallback(() => {
