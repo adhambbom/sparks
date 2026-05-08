@@ -30,9 +30,9 @@ function isFloor(x: number, y: number): boolean {
   if (y < 0 || y >= ACADEMY_MAP.length) return false;
   if (x < 0 || x >= ACADEMY_MAP[0].length) return false;
   const t = ACADEMY_MAP[y][x];
-  // Walkable tiles: floor (0), npc (3), trial doors, store, skill chamber, arena, sapphire core (9), spike (8), console (10)
-  // Walls (1) and debris (11) block movement
-  return t !== 1 && t !== 11;
+  // Walkable tiles: floor (0), npc (3), trial doors, store, skill chamber, arena, sapphire core (9), spike (8), console (10), castle banner (13)
+  // Walls (1), debris (11), castle walls (12) block movement
+  return t !== 1 && t !== 11 && t !== 12;
 }
 
 function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>): { x: number; y: number } | null {
@@ -201,11 +201,13 @@ export default function GameScreen() {
         };
         const tx = Math.floor(np.px / TILE);
         const ty = Math.floor(np.py / TILE);
-        // Bounds + wall collision
+        // Bounds + wall/castle/debris collision
         if (
           ty >= 0 && ty < ACADEMY_MAP.length &&
           tx >= 0 && tx < ACADEMY_MAP[0].length &&
-          ACADEMY_MAP[ty][tx] !== 1
+          ACADEMY_MAP[ty][tx] !== 1 &&
+          ACADEMY_MAP[ty][tx] !== 11 &&
+          ACADEMY_MAP[ty][tx] !== 12
         ) {
           posRef.current = np;
           // Check tile change
@@ -350,7 +352,9 @@ export default function GameScreen() {
   }
 
   const camX = posRef.current.px - SW / 2;
-  const camY = posRef.current.py - SH / 2 - 110;
+  // Camera offset: keeps player vertically centered ABOVE the D-pad/A-B controls.
+  // HUD is ~120px at top; controls occupy ~200px at bottom. Playable midpoint is slightly above screen center.
+  const camY = posRef.current.py - SH / 2 + 40;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -383,7 +387,7 @@ export default function GameScreen() {
               </PixelText>
             </View>
           ))}
-          {/* Roaming enemies */}
+          {/* Roaming enemies - rusty Clockwork Scout style */}
           {roamers.map((r) => {
             const enemy = (ENEMIES as any)[r.enemyId];
             return (
@@ -391,32 +395,43 @@ export default function GameScreen() {
                 key={r.uid}
                 style={[
                   styles.roamer,
-                  { left: r.x * TILE + 2, top: r.y * TILE + 2 },
+                  { left: r.x * TILE - 6, top: r.y * TILE - 8 },
                 ]}
               >
                 <View style={[styles.roamerBg, r.chasing && styles.roamerBgChasing]}>
-                  <Sprite index={enemy?.spriteIndex ?? 0} size={28} />
+                  <Sprite index={enemy?.spriteIndex ?? 0} size={44} />
                 </View>
                 <View style={[styles.alertDot, r.chasing && styles.alertDotChasing]} />
               </View>
             );
           })}
-          {/* Player sprite - layered cyborg look */}
+          {/* Player sprite — mini-ADHAMB style: pink-armored cyborg with visor */}
           <View style={[
             styles.player,
-            { left: posRef.current.px - 14, top: posRef.current.py - 20 },
+            { left: posRef.current.px - 18, top: posRef.current.py - 26 },
           ]}>
+            {/* Antenna */}
+            <View style={styles.playerAntenna} />
+            {/* Head */}
+            <View style={styles.playerHead}>
+              <View style={styles.playerHair} />
+            </View>
             {/* Visor band */}
             <View style={styles.playerVisor} />
-            {/* Head */}
-            <View style={styles.playerHead} />
-            {/* Body / armor */}
-            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(state.player.house as any) || 'obsidian']?.color || COLORS.neonCyan }]}>
-              {/* Chest accent */}
+            {/* Body / pink armor with shoulder pads */}
+            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(state.player.house as any) || 'obsidian']?.color || '#ff6fa8' }]}>
+              {/* Chest core / accent */}
               <View style={styles.playerChestAccent} />
+              {/* Shoulder pads */}
+              <View style={styles.playerShoulderL} />
+              <View style={styles.playerShoulderR} />
             </View>
+            {/* Belt */}
+            <View style={styles.playerBelt} />
             {/* Legs */}
-            <View style={styles.playerLegs} />
+            <View style={styles.playerLegs}>
+              <View style={styles.playerKnee} />
+            </View>
           </View>
         </View>
       </View>
@@ -547,9 +562,12 @@ function Tile({ type }: { type: number }) {
   else if (type === 9) { bg = '#0a1838'; inner = <PixelText size={20} color={COLORS.neonCyan} glow bold>◆</PixelText>; }
   else if (type === 10) { bg = '#1a3a3a'; inner = <PixelText size={14} color={COLORS.neonGreen} glow bold>⚙</PixelText>; }
   else if (type === 11) { bg = '#1a1418'; inner = <PixelText size={14} color={COLORS.textDim} bold>▓▓</PixelText>; }
+  else if (type === 12) { bg = '#3a2a4e'; }  // castle stone wall - lighter purple-stone
+  else if (type === 13) { bg = '#1e1830'; inner = <PixelText size={14} color={COLORS.neonMagenta} glow bold>♦</PixelText>; }  // castle banner
   return (
     <View style={[styles.tile, { backgroundColor: bg, width: TILE, height: TILE }]}>
       {type === 1 && <View style={styles.wallInner} />}
+      {type === 12 && <View style={styles.castleWallInner} />}
       {type === 0 && <View style={styles.floorDot} />}
       {inner}
     </View>
@@ -566,41 +584,86 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d0d1a',
     borderColor: '#2a2a4a', borderWidth: 1,
   },
+  castleWallInner: {
+    width: TILE - 4, height: TILE - 4,
+    backgroundColor: '#1f1830',
+    borderColor: '#6a4a8a', borderWidth: 2,
+    shadowColor: '#ff2dd4', shadowOpacity: 0.4, shadowRadius: 4,
+  },
   floorDot: { position: 'absolute', width: 2, height: 2, backgroundColor: 'rgba(100,100,180,0.3)' },
   player: {
     position: 'absolute',
-    width: 28, height: 40,
+    width: 36, height: 52,
     alignItems: 'center', justifyContent: 'flex-start',
+    zIndex: 10,
+  },
+  playerAntenna: {
+    width: 2, height: 5,
+    backgroundColor: '#ff2dd4',
+    marginBottom: 1,
+    shadowColor: '#ff2dd4', shadowOpacity: 1, shadowRadius: 3,
   },
   playerHead: {
-    width: 14, height: 12,
+    width: 18, height: 16,
     backgroundColor: '#ffd5b3',
     borderWidth: 1, borderColor: '#000',
+    alignItems: 'center', justifyContent: 'flex-start',
+  },
+  playerHair: {
+    width: 18, height: 4,
+    backgroundColor: '#3a2418',
+    borderBottomWidth: 1, borderBottomColor: '#000',
   },
   playerVisor: {
     position: 'absolute',
-    top: 4, width: 16, height: 3,
+    top: 11, width: 20, height: 4,
     backgroundColor: '#00f0ff',
+    borderWidth: 1, borderColor: '#000',
     zIndex: 5,
     shadowColor: '#00f0ff', shadowOpacity: 1, shadowRadius: 4,
   },
   playerBody: {
-    width: 22, height: 16,
+    width: 26, height: 18,
     borderWidth: 1, borderColor: '#000',
     marginTop: -1,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#fff', shadowOpacity: 0.3, shadowRadius: 4,
+    position: 'relative',
   },
   playerChestAccent: {
-    width: 6, height: 4,
+    width: 8, height: 6,
     backgroundColor: '#ffd700',
     borderWidth: 1, borderColor: '#000',
   },
-  playerLegs: {
-    width: 16, height: 8,
+  playerShoulderL: {
+    position: 'absolute', left: -3, top: 0,
+    width: 5, height: 8,
+    backgroundColor: '#7a2a4a',
+    borderWidth: 1, borderColor: '#000',
+  },
+  playerShoulderR: {
+    position: 'absolute', right: -3, top: 0,
+    width: 5, height: 8,
+    backgroundColor: '#7a2a4a',
+    borderWidth: 1, borderColor: '#000',
+  },
+  playerBelt: {
+    width: 24, height: 3,
     backgroundColor: '#202030',
     borderWidth: 1, borderColor: '#000',
     marginTop: -1,
+  },
+  playerLegs: {
+    width: 20, height: 12,
+    backgroundColor: '#202030',
+    borderWidth: 1, borderColor: '#000',
+    marginTop: -1,
+    flexDirection: 'row',
+  },
+  playerKnee: {
+    position: 'absolute', top: 4, left: 8,
+    width: 4, height: 2,
+    backgroundColor: '#00f0ff',
   },
   npc: {
     position: 'absolute',
@@ -614,13 +677,14 @@ const styles = StyleSheet.create({
   },
   roamer: {
     position: 'absolute',
-    width: TILE - 4, height: TILE - 4,
+    width: 50, height: 50,
     alignItems: 'center', justifyContent: 'center',
+    zIndex: 8,
   },
   roamerBg: {
-    width: 34, height: 34,
-    backgroundColor: 'rgba(255,56,96,0.25)',
-    borderWidth: 1, borderColor: COLORS.neonRed,
+    width: 48, height: 48,
+    backgroundColor: 'rgba(255,56,96,0.18)',
+    borderWidth: 2, borderColor: COLORS.neonRed,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: COLORS.neonRed,
     shadowOpacity: 0.8,
