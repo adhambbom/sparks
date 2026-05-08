@@ -19,7 +19,13 @@ export default function CombatScreen() {
   const [enemyId] = useState<string>(params.enemyId || 'spider_bot');
   const enemyData = ENEMIES[enemyId];
   const [enemyHp, setEnemyHp] = useState(enemyData?.hp || 30);
-  const [log, setLog] = useState<string[]>([`A wild ${enemyData?.name} appears!`]);
+  const [enemyAtk, setEnemyAtk] = useState(enemyData?.atk || 5);
+  const [enemyAbilities, setEnemyAbilities] = useState<string[]>(enemyData?.abilities || ['power_strike']);
+  const [phaseChanged, setPhaseChanged] = useState(false);
+  const [phaseFlash, setPhaseFlash] = useState(false);
+  const [log, setLog] = useState<string[]>([
+    enemyData?.isBoss ? `⚠ BOSS: ${enemyData?.name} appears!` : `A wild ${enemyData?.name} appears!`,
+  ]);
   const [panel, setPanel] = useState<ActionPanel>('main');
   const [turn, setTurn] = useState<'player' | 'enemy' | 'end'>('player');
   const [busy, setBusy] = useState(false);
@@ -40,12 +46,29 @@ export default function CombatScreen() {
   }
   const player = state.player;
 
-  // Determine first turn based on speed
+  // Determine first turn based on speed + boss intro SFX
   useEffect(() => {
+    if (enemyData?.isBoss) sfx.bossPhase(); else sfx.encounter();
     if (player.spd < enemyData.spd) {
       setTimeout(() => enemyTurn(), 700);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Boss phase change check - triggers once at 50% HP
+  useEffect(() => {
+    if (!enemyData?.isBoss || phaseChanged) return;
+    if (enemyHp > 0 && enemyHp <= enemyData.hp * 0.5) {
+      setPhaseChanged(true);
+      setPhaseFlash(true);
+      sfx.bossPhase();
+      setEnemyAtk(Math.floor(enemyData.atk * 1.5));
+      if (enemyData.phaseAbilities) setEnemyAbilities(enemyData.phaseAbilities);
+      pushLog(`⚠ ${enemyData.name} ENRAGES! ATK +50%`);
+      if (enemyData.phaseQuote) pushLog(`"${enemyData.phaseQuote}"`);
+      setTimeout(() => setPhaseFlash(false), 1500);
+    }
+  }, [enemyHp, enemyData, phaseChanged]);
 
   // ----- helpers -----
   const pushLog = (s: string) => setLog((l) => [...l.slice(-3), s]);
@@ -79,6 +102,7 @@ export default function CombatScreen() {
   const playerAttack = () => {
     if (busy) return;
     setBusy(true);
+    sfx.hit();
     const dmg = computeDamage(1.0, 'physical', player.atk, enemyData.def);
     setEnemyHp((hp) => Math.max(0, hp - dmg));
     showFloater(`-${dmg}`, COLORS.neonYellow, 'e');
@@ -98,6 +122,7 @@ export default function CombatScreen() {
     setBusy(true);
     applyMpCost(ab.cost);
     if (ab.type === 'attack') {
+      sfx.bigHit();
       let dmg = computeDamage(ab.power, ab.element, player.atk, enemyData.def);
       setEnemyHp((hp) => Math.max(0, hp - dmg));
       showFloater(`-${dmg}`, COLORS.neonCyan, 'e');
@@ -109,10 +134,12 @@ export default function CombatScreen() {
         showFloater(`+${Math.floor(dmg * 0.3)}`, COLORS.neonGreen, 'p');
       }
     } else if (ab.type === 'heal') {
+      sfx.heal();
       applyHeal(ab.power);
       showFloater(`+${ab.power}`, COLORS.neonGreen, 'p');
       pushLog(`${ab.name}! Restored ${ab.power} HP.`);
     } else if (ab.type === 'buff') {
+      sfx.skill();
       if (ab.effect === 'shield') { setShield(true); pushLog('Data Shield up! 50% reduction.'); }
       if (ab.effect === 'haste') { setHaste(true); pushLog('Phase Step! Speed surge.'); }
       if (ab.effect === 'cleanse') {
@@ -148,14 +175,22 @@ export default function CombatScreen() {
     if (busy) return;
     if (params.mode === 'arena') {
       pushLog('No retreat from the arena!');
+      sfx.cancel();
+      return;
+    }
+    if (enemyData.isBoss) {
+      pushLog('No retreat from a boss!');
+      sfx.cancel();
       return;
     }
     const succeed = Math.random() < 0.6 + (player.spd - enemyData.spd) * 0.04;
     if (succeed) {
+      sfx.confirm();
       pushLog('Got away safely.');
       setTimeout(() => router.back(), 700);
     } else {
       setBusy(true);
+      sfx.cancel();
       pushLog('Failed to escape!');
       setTimeout(() => endPlayerTurn(), 700);
     }
@@ -188,20 +223,22 @@ export default function CombatScreen() {
     setTurn('enemy');
     setBusy(true);
     setTimeout(() => {
-      const abId = enemyData.abilities[Math.floor(Math.random() * enemyData.abilities.length)];
+      const abId = enemyAbilities[Math.floor(Math.random() * enemyAbilities.length)];
       const ab = ABILITIES[abId];
       let dmg = 0;
       if (ab && ab.type === 'attack') {
-        dmg = computeDamage(ab.power, ab.element, enemyData.atk, player.def);
+        dmg = computeDamage(ab.power, ab.element, enemyAtk, player.def);
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); pushLog('Shield absorbs!'); }
         applyDamage(dmg);
+        sfx.damage();
         showFloater(`-${dmg}`, COLORS.neonRed, 'p');
         shakeAnim(playerShake);
         pushLog(`${enemyData.name} ${ab.name}! ${dmg} dmg.`);
       } else {
-        dmg = computeDamage(1.0, 'physical', enemyData.atk, player.def);
+        dmg = computeDamage(1.0, 'physical', enemyAtk, player.def);
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); }
         applyDamage(dmg);
+        sfx.damage();
         showFloater(`-${dmg}`, COLORS.neonRed, 'p');
         shakeAnim(playerShake);
         pushLog(`${enemyData.name} attacks for ${dmg}!`);
@@ -221,10 +258,11 @@ export default function CombatScreen() {
   // ----- end states -----
   const onVictory = async () => {
     setTurn('end');
+    sfx.victory();
     pushLog(`Victory! +${enemyData.xp} XP, +${enemyData.gold}G`);
     addGold(enemyData.gold);
     const leveled = awardXp(enemyData.xp);
-    if (leveled) pushLog('LEVEL UP! +1 Skill Point.');
+    if (leveled) { sfx.levelUp(); pushLog('LEVEL UP! +1 Skill Point.'); }
     // Drops
     const drops: string[] = [];
     enemyData.drops?.forEach((d) => {
@@ -246,6 +284,7 @@ export default function CombatScreen() {
 
   const onDefeat = async () => {
     setTurn('end');
+    sfx.defeat();
     pushLog('You collapsed...');
     setTimeout(() => router.replace('/gameover'), 1200);
   };
@@ -258,15 +297,24 @@ export default function CombatScreen() {
 
       {/* Battle stage */}
       <View style={styles.stage}>
+        {/* Phase change flash */}
+        {phaseFlash && <View style={styles.phaseFlash} pointerEvents="none" />}
+
         {/* Enemy */}
         <Animated.View style={[styles.enemyBox, { transform: [{ translateX: enemyShake }] }]}>
-          <PixelText size={14} color={COLORS.neonRed} bold>{enemyData.name.toUpperCase()}</PixelText>
-          <PixelText size={9} color={COLORS.textDim}>TIER {enemyData.tier} · SPD {enemyData.spd}</PixelText>
+          <View style={styles.enemyHeaderRow}>
+            <PixelText size={14} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.neonRed} bold glow={enemyData.isBoss}>
+              {enemyData.isBoss ? '⚠ ' : ''}{enemyData.name.toUpperCase()}{phaseChanged ? ' [ENRAGED]' : ''}
+            </PixelText>
+          </View>
+          <PixelText size={9} color={COLORS.textDim}>
+            TIER {enemyData.tier} · SPD {enemyData.spd}{enemyData.isBoss ? ' · BOSS' : ''}
+          </PixelText>
           <View style={{ marginTop: 6 }}>
-            <StatBar value={enemyHp} max={enemyData.hp} color={COLORS.hp} bgColor={COLORS.hpBg} width={200} height={8} showText={false} />
+            <StatBar value={enemyHp} max={enemyData.hp} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.hp} bgColor={COLORS.hpBg} width={240} height={10} showText={false} />
           </View>
           <View style={{ marginTop: 14, alignItems: 'center' }}>
-            <Sprite index={enemyData.spriteIndex} size={130} />
+            <Sprite index={enemyData.spriteIndex} size={140} glow={enemyData.isBoss} />
           </View>
           {floaters.filter(f => f.side === 'e').map(f => (
             <View key={f.id} style={styles.floater}>
@@ -393,6 +441,12 @@ const styles = StyleSheet.create({
     paddingTop: 50,
   },
   enemyBox: { alignItems: 'center', minHeight: 240 },
+  enemyHeaderRow: { flexDirection: 'row', alignItems: 'center' },
+  phaseFlash: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(255,45,212,0.25)',
+    zIndex: 10,
+  },
   playerBox: {
     alignItems: 'flex-start',
     paddingLeft: 24,

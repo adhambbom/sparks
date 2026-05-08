@@ -6,6 +6,7 @@ import { COLORS, ITEMS, STORE_ITEMS } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { useGame } from '../src/contexts/GameContext';
+import { sfx } from '../src/utils/audio';
 
 export default function StoreScreen() {
   const { state, addGold, addItem, saveToServer } = useGame();
@@ -17,10 +18,12 @@ export default function StoreScreen() {
   const buy = async (id: string) => {
     const item = ITEMS[id];
     if (!item || (item.cost ?? 0) > player.gold) {
+      sfx.cancel();
       setFeedback('NOT ENOUGH CREDITS');
       setTimeout(() => setFeedback(''), 1500);
       return;
     }
+    sfx.buy();
     addGold(-(item.cost || 0));
     addItem(id, 1);
     setFeedback(`+${item.name}`);

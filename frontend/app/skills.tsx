@@ -6,6 +6,7 @@ import { COLORS, ABILITIES_LIST } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { useGame } from '../src/contexts/GameContext';
+import { sfx } from '../src/utils/audio';
 
 export default function SkillsScreen() {
   const { state, unlockAbility, saveToServer } = useGame();
@@ -19,6 +20,7 @@ export default function SkillsScreen() {
   ];
 
   const onUnlock = async (id: string) => {
+    sfx.confirm();
     unlockAbility(id);
     await saveToServer();
   };

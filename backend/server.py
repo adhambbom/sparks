@@ -186,12 +186,53 @@ async def register(req: RegisterRequest, response: Response):
         "access_token": access,
     }
 
+# Brute-force protection
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
+
+async def check_lockout(email: str):
+    """Raise 429 if user is locked out."""
+    record = await db.login_attempts.find_one({"identifier": email})
+    if not record:
+        return
+    locked_until = record.get("locked_until")
+    # Mongo may return naive datetimes; make tz-aware as UTC for safe comparison.
+    if locked_until is not None and locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=timezone.utc)
+    if locked_until and locked_until > datetime.now(timezone.utc):
+        remaining = int((locked_until - datetime.now(timezone.utc)).total_seconds() / 60) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Locked for {remaining} minute(s).",
+        )
+
+async def record_login_failure(email: str):
+    record = await db.login_attempts.find_one({"identifier": email})
+    fails = (record.get("fails", 0) if record else 0) + 1
+    update: Dict[str, Any] = {
+        "identifier": email,
+        "fails": fails,
+        "last_attempt": datetime.now(timezone.utc),
+    }
+    if fails >= MAX_FAILED_ATTEMPTS:
+        update["locked_until"] = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_MINUTES)
+        update["fails"] = 0  # reset counter; lockout held by locked_until
+    await db.login_attempts.update_one(
+        {"identifier": email}, {"$set": update}, upsert=True,
+    )
+
+async def clear_login_failures(email: str):
+    await db.login_attempts.delete_one({"identifier": email})
+
 @api.post("/auth/login")
 async def login(req: LoginRequest, response: Response):
     email = req.email.lower()
+    await check_lockout(email)
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(req.password, user["password_hash"]):
+        await record_login_failure(email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    await clear_login_failures(email)
     user_id = str(user["_id"])
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
@@ -352,6 +393,7 @@ async def startup():
     await db.users.create_index("email", unique=True)
     await db.game_saves.create_index("user_id", unique=True)
     await db.arena_scores.create_index([("score", -1)])
+    await db.login_attempts.create_index("identifier", unique=True)
     # Seed admin
     existing_admin = await db.users.find_one({"email": ADMIN_EMAIL})
     if not existing_admin:

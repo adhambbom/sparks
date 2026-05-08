@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 2 - Backend + Frontend e2e for Synthetic Sparks. Added /app/backend/tests/test_lockout.py covering brute-force lockout (5 fails -> 429), counter reset on success, isolation between users, and unique index on login_attempts.identifier. Found and fixed a real backend bug: tz-naive datetime returned by MongoDB caused the lockout check to throw 500 instead of 429. After fix, 27/27 backend tests pass. Frontend e2e on the public preview URL (mobile viewport 390x844) verified: title screen with neon SYNTHETIC/SPARKS + LOGIN/REGISTER, register flow returns to title with BEGIN JOURNEY/CONTINUE/LEADERBOARD/LOGOUT, character creation page with 'IGNITE THE SPARK' navigates to /game, game world renders tile map + player sprite + virtual joystick + A/B buttons + HUD (HP/MP/GOLD/XP/LV), pause menu (Action B) shows stats + SKILL TREE/INVENTORY/REST/SAVE CHECKPOINT/QUIT TO TITLE/RESUME, skill tree page lists all 3 branches CYBER-STRIKES / PHASE-SHIFTING / TECHNOMANCY with abilities + LV req + prereqs, admin login (admin@example.com/admin123) succeeds, and 5 wrong login attempts trigger a visible 'TOO MANY FAILED ATTEMPTS. LOCKED FOR 15 MINUTE(S).' message in the login screen (HTTP 429).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login (check_lockout)", "issue": "FIXED in this iteration. MongoDB returned naive datetime for locked_until; comparison with tz-aware datetime.now(timezone.utc) raised TypeError -> 500. Patched server.py to coerce locked_until to UTC tz-aware before comparison."},
+      {"endpoint": "set_auth_cookies", "issue": "Cookies still set with secure=False / samesite='lax'. Works for current preview, but production HTTPS deployment with cross-origin Expo web bundle should switch to secure=True + samesite='none'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Pause menu modal", "issue": "Buttons (SKILL TREE / INVENTORY / REST / SAVE CHECKPOINT / QUIT TO TITLE / RESUME) lack testID props. Worked around using getByText, but please add testIDs e.g. pause-skill-tree, pause-inventory, pause-rest, pause-checkpoint, pause-quit, pause-resume.", "testID": "missing", "priority": "MEDIUM"},
+      {"component": "Title screen (index.tsx)", "issue": "Buttons title-new-game / title-leaderboard / title-logout are duplicated in the DOM (two elements with the same testID, only the second is visible). Tests had to use locator(...).last.click(). Likely a responsive layout that renders both desktop+mobile copies. Make the testID unique per visible variant, OR conditionally render only one.", "testID": "duplicate", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Initial app boot", "issue": "Console shows two harmless GET /api/auth/me 401s before user logs in (expected - auth probe). Not a bug, but could be silenced when no token is stored.", "affected_testIDs": []}
+    ],
+    "design_issues": [
+      {"screen": "Skill tree", "issues": ["Locked abilities show only an 'LV2/LV4/...' badge for state. Consider explicit OWNED / UNLOCK / LV REQ labels per the spec - right now state is implied by greyed badge + 'LV REQ N' text."]}
+    ],
+    "react_native_issues": [
+      {"component": "Multiple", "issue": "Console deprecation warnings: 'shadow*' style props (use boxShadow), 'textShadow*' (use textShadow), props.pointerEvents (use style.pointerEvents), Image style.resizeMode (use props.resizeMode). Non-blocking but should be cleaned up."},
+      {"component": "Package versions", "issue": "Expo doctor warns: @react-native-async-storage/async-storage@3.0.2 expected 2.2.0, expo-audio@55.0.14 expected ~1.1.1, expo-haptics@55.0.14 expected ~15.0.8. Functioned in tests but may break native builds."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_synthetic_sparks_backend.py",
+    "/app/backend/tests/test_lockout.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add testIDs to pause menu buttons (pause-skill-tree, pause-inventory, pause-rest, pause-checkpoint, pause-quit, pause-resume) for stable e2e tests.",
+    "Make duplicated title-screen testIDs unique (or render only the visible variant) - title-new-game/title-continue/title-leaderboard/title-logout currently appear twice.",
+    "Consider adding visible OWNED/UNLOCK/LV REQ chips per skill on the skill-tree screen so state is explicit.",
+    "Optional: silence the harmless /api/auth/me 401 console errors when no token is stored.",
+    "Optional: align package versions per `expo doctor` output before native build."
+  ],
+  "critical_code_review_comments": [
+    "BUG (fixed): check_lockout compared MongoDB naive datetime vs tz-aware datetime.now(timezone.utc) -> 500 on login when a lockout was active. Adding `.replace(tzinfo=timezone.utc)` resolved it. Same pattern should be applied anywhere else that reads datetimes from Mongo and compares them (none found in current server.py).",
+    "Lockout reset logic is correct: record_login_failure resets fails to 0 when threshold is reached (lockout held by locked_until), and clear_login_failures deletes the record entirely on successful login.",
+    "MongoDB unique index login_attempts.identifier confirmed via list_indexes()."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (fixed tz-naive datetime comparison in check_lockout)",
+    "/app/backend/tests/test_lockout.py (created)"
+  ],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "100% of requested e2e flows verified"},
+  "seed_data_creation": "Tests register fresh users with random uuid emails (e2e_*, lock_*, test_reg_*). Admin (admin@example.com/admin123) is auto-seeded by backend startup. login_attempts entries are ephemeral and self-clear on successful login.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend lockout works end-to-end. Frontend boot, register, char-create, game world, pause menu, skill tree, admin login, and 429 lockout error UI all verified. testID gaps in pause modal and duplicate testIDs on title screen are the main remaining frontend cleanups. Boss-tile combat (tiles 2 and 7) was NOT exercised because new players are level 1 and the trial doors gate at level >=4 / >=7 by design - main agent flagged this as expected. To re-run: `set -a && source /app/backend/.env && set +a && pytest /app/backend/tests/ -v`.",
+  "rca_of_issue": "Login lockout returned 500 instead of 429. ROOT CAUSE: motor/pymongo decode BSON UTC datetimes as Python naive datetimes by default, so `record['locked_until']` was tz-naive while `datetime.now(timezone.utc)` is tz-aware; comparing them raises TypeError. REPRO: register a user, send 5 wrong-password POST /api/auth/login, then send any 6th login - server returns 500 with traceback. FIX: in check_lockout, coerce locked_until to UTC tz-aware via `if locked_until.tzinfo is None: locked_until = locked_until.replace(tzinfo=timezone.utc)` before comparison. Verified 27/27 tests pass post-fix and the UI now displays 'TOO MANY FAILED ATTEMPTS. LOCKED FOR 15 MINUTE(S).'"
+}

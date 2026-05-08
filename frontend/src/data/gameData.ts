@@ -285,11 +285,11 @@ export const ENEMIES: Record<string, Enemy> = {
   spike_mutant: { id: 'spike_mutant', name: 'Spike-Mutant', spriteIndex: 17, hp: 110, atk: 21, def: 9, spd: 11, xp: 62, gold: 44, abilities: ['rage_burst'], weakness: 'cyber', tier: 4, drops: [{ itemId: 'health_pack', chance: 0.5 }] },
   bio_serpent: { id: 'bio_serpent', name: 'Bio-Engineered Serpent', spriteIndex: 18, hp: 105, atk: 22, def: 8, spd: 14, xp: 65, gold: 50, abilities: ['rage_burst'], weakness: 'cyber', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.4 }] },
   data_ghost: { id: 'data_ghost', name: 'Data-Ghost', spriteIndex: 19, hp: 90, atk: 25, def: 5, spd: 17, xp: 70, gold: 50, abilities: ['hack', 'mind_blast'], weakness: 'psi', resist: 'physical', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.6 }] },
-  mutant_assembler: { id: 'mutant_assembler', name: 'Mutant-Assembler', spriteIndex: 20, hp: 140, atk: 23, def: 11, spd: 8, xp: 75, gold: 60, abilities: ['rage_burst', 'mech_slam'], weakness: 'cyber', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.5 }] },
-  core_keeper: { id: 'core_keeper', name: 'Core-Keeper', spriteIndex: 21, hp: 160, atk: 22, def: 14, spd: 9, xp: 80, gold: 65, abilities: ['rocket_punch'], weakness: 'energy', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.6 }] },
+  mutant_assembler: { id: 'mutant_assembler', name: 'Mutant-Assembler', spriteIndex: 20, hp: 200, atk: 24, def: 12, spd: 9, xp: 150, gold: 120, abilities: ['rage_burst', 'mech_slam'], weakness: 'cyber', tier: 4, isBoss: true, phaseAbilities: ['rocket_punch', 'overload'], phaseQuote: 'PROTOCOL: ASSIMILATE.', drops: [{ itemId: 'rare_chip', chance: 1.0 }, { itemId: 'nano_armor', chance: 0.4 }] },
+  core_keeper: { id: 'core_keeper', name: 'Core-Keeper', spriteIndex: 21, hp: 240, atk: 26, def: 14, spd: 10, xp: 180, gold: 150, abilities: ['rocket_punch'], weakness: 'energy', tier: 4, isBoss: true, phaseAbilities: ['mind_control', 'overload'], phaseQuote: 'CORE BREACH IMMINENT.', drops: [{ itemId: 'rare_chip', chance: 1.0 }, { itemId: 'cyber_blade', chance: 0.4 }] },
   crawler_fly: { id: 'crawler_fly', name: 'Crawler-Fly', spriteIndex: 22, hp: 95, atk: 26, def: 6, spd: 18, xp: 78, gold: 55, abilities: ['plasma_blade'], weakness: 'physical', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.5 }] },
-  glitch_avatar: { id: 'glitch_avatar', name: 'The Glitch Avatar', spriteIndex: 23, hp: 220, atk: 28, def: 16, spd: 12, xp: 120, gold: 100, abilities: ['mind_control', 'rage_burst', 'rocket_punch'], weakness: 'psi', tier: 4, drops: [{ itemId: 'rare_chip', chance: 1.0 }] },
-  glitch_final: { id: 'glitch_final', name: 'Final Form', spriteIndex: 24, hp: 300, atk: 32, def: 18, spd: 14, xp: 200, gold: 200, abilities: ['mind_control', 'overload', 'rocket_punch'], weakness: 'psi', tier: 4, drops: [{ itemId: 'rare_chip', chance: 1.0 }] },
+  glitch_avatar: { id: 'glitch_avatar', name: 'The Glitch Avatar', spriteIndex: 23, hp: 320, atk: 30, def: 16, spd: 13, xp: 280, gold: 250, abilities: ['mind_control', 'rage_burst', 'rocket_punch'], weakness: 'psi', tier: 4, isBoss: true, phaseAbilities: ['mind_control', 'overload', 'rocket_punch'], phaseQuote: 'I AM EVERYWHERE. I AM YOU.', drops: [{ itemId: 'rare_chip', chance: 1.0 }, { itemId: 'glitch_plate', chance: 0.5 }] },
+  glitch_final: { id: 'glitch_final', name: 'Final Form', spriteIndex: 24, hp: 450, atk: 34, def: 20, spd: 15, xp: 500, gold: 500, abilities: ['mind_control', 'overload', 'rocket_punch'], weakness: 'psi', tier: 4, isBoss: true, phaseAbilities: ['mind_control', 'overload', 'rocket_punch', 'rage_burst'], phaseQuote: 'TERMINATION SEQUENCE INITIATED.', drops: [{ itemId: 'rare_chip', chance: 1.0 }, { itemId: 'pulse_cannon', chance: 0.3 }, { itemId: 'glitch_plate', chance: 0.3 }] },
 };
 
 export const ENEMIES_LIST = Object.values(ENEMIES);
@@ -357,7 +357,7 @@ export function xpForNextLevel(level: number): number {
 
 // ============================================================
 // ACADEMY MAP - simple 20x15 grid
-// 0=floor, 1=wall, 2=door (combat trial), 3=NPC, 4=arena exit, 5=store, 6=skill chamber
+// 0=floor, 1=wall, 2=trial-door (boss), 3=NPC, 4=arena exit, 5=store, 6=skill chamber, 7=final-trial-door
 // ============================================================
 export const ACADEMY_MAP: number[][] = [
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -366,7 +366,7 @@ export const ACADEMY_MAP: number[][] = [
   [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
   [1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1],
   [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
-  [1,0,3,0,0,0,3,0,0,0,0,0,0,0,3,0,0,0,0,1],
+  [1,0,3,0,0,0,3,0,0,0,0,0,0,0,3,0,2,0,7,1],
   [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
   [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
   [1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],

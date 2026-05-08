@@ -2,6 +2,7 @@ import React from 'react';
 import { TouchableOpacity, StyleSheet, View, ViewStyle } from 'react-native';
 import { COLORS } from '../data/gameData';
 import { PixelText } from './PixelText';
+import { sfx } from '../utils/audio';
 
 type Props = {
   title: string;
@@ -12,16 +13,21 @@ type Props = {
   full?: boolean;
   testID?: string;
   style?: ViewStyle;
+  silent?: boolean;
 };
 
-export function PixelButton({ title, onPress, color = COLORS.neonCyan, disabled, size = 'md', full, testID, style }: Props) {
+export function PixelButton({ title, onPress, color = COLORS.neonCyan, disabled, size = 'md', full, testID, style, silent }: Props) {
   const padV = size === 'sm' ? 8 : size === 'lg' ? 16 : 12;
   const padH = size === 'sm' ? 12 : size === 'lg' ? 28 : 20;
   const fontSize = size === 'sm' ? 12 : size === 'lg' ? 18 : 14;
+  const handlePress = () => {
+    if (!silent) sfx.click();
+    onPress();
+  };
   return (
     <TouchableOpacity
       activeOpacity={0.7}
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled}
       testID={testID}
       style={[

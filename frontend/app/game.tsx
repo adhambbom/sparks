@@ -10,6 +10,7 @@ import { VirtualJoystick } from '../src/components/VirtualJoystick';
 import { ActionButton } from '../src/components/ActionButton';
 import { useGame } from '../src/contexts/GameContext';
 import { useAuth } from '../src/contexts/AuthContext';
+import { sfx } from '../src/utils/audio';
 
 const TILE = 38;
 const SPEED = 4; // pixels per frame
@@ -98,6 +99,8 @@ export default function GameScreen() {
     if (tile === 5) setHint('STORE — Press A');
     else if (tile === 6) setHint('SKILL CHAMBER — Press A');
     else if (tile === 4) setHint('LAUNCH PAD — Press A');
+    else if (tile === 2) setHint('TRIAL DOOR — Press A · BOSS');
+    else if (tile === 7) setHint('FINAL TRIAL — Press A · ⚠ BOSS');
     else setHint('');
     // Random encounter (only on floor type 0)
     if (tile === 0 && Math.random() < ENCOUNTER_CHANCE) {
@@ -108,10 +111,12 @@ export default function GameScreen() {
   const triggerEncounter = () => {
     const pool = ENCOUNTER_POOLS.academy;
     const enemyId = pool[Math.floor(Math.random() * pool.length)];
+    sfx.encounter();
     router.push({ pathname: '/combat', params: { enemyId, mode: 'random' } });
   };
 
   const onActionA = () => {
+    sfx.click();
     // Talk to nearby NPC, enter store, etc.
     if (dialog) {
       // advance dialog
@@ -128,12 +133,25 @@ export default function GameScreen() {
       else setHint('LOCKED. Reach Sync Lv 5');
       return;
     }
+    if (tile === 2) {
+      // Trial Boss: Mutant-Assembler
+      if ((state?.player.level || 0) < 4) { setHint('SYNC TOO LOW. NEED LV 4'); return; }
+      router.push({ pathname: '/combat', params: { enemyId: 'mutant_assembler', mode: 'boss' } });
+      return;
+    }
+    if (tile === 7) {
+      // Final Trial: Glitch Avatar
+      if ((state?.player.level || 0) < 7) { setHint('SYNC TOO LOW. NEED LV 7'); return; }
+      router.push({ pathname: '/combat', params: { enemyId: 'glitch_avatar', mode: 'boss' } });
+      return;
+    }
     // Find nearby NPC (within 1 tile)
     const npc = Object.values(NPCS).find(n => Math.abs(n.x - x) <= 1 && Math.abs(n.y - y) <= 1);
     if (npc) setDialog({ name: npc.name, lines: npc.lines, line: 0 });
   };
 
   const onActionB = () => {
+    sfx.click();
     setPauseOpen(true);
   };
 
@@ -292,6 +310,8 @@ function Tile({ type }: { type: number }) {
   else if (type === 5) { bg = '#2a1a3e'; inner = <PixelText size={14} color={COLORS.neonYellow} bold>$</PixelText>; }
   else if (type === 6) { bg = '#1a2a3e'; inner = <PixelText size={14} color={COLORS.neonMagenta} bold>★</PixelText>; }
   else if (type === 4) { bg = '#3e1a1a'; inner = <PixelText size={14} color={COLORS.neonRed} bold>↑</PixelText>; }
+  else if (type === 2) { bg = '#3e2a1a'; inner = <PixelText size={12} color={COLORS.neonMagenta} bold>⚠</PixelText>; }
+  else if (type === 7) { bg = '#3e0a3e'; inner = <PixelText size={12} color={COLORS.neonMagenta} glow bold>⚠</PixelText>; }
   return (
     <View style={[styles.tile, { backgroundColor: bg, width: TILE, height: TILE }]}>
       {type === 1 && <View style={styles.wallInner} />}

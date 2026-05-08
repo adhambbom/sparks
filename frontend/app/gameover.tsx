@@ -6,6 +6,7 @@ import { COLORS } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { useGame } from '../src/contexts/GameContext';
+import { sfx } from '../src/utils/audio';
 
 export default function GameOverScreen() {
   const { state, restoreCheckpoint } = useGame();
@@ -13,6 +14,7 @@ export default function GameOverScreen() {
   const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
+    sfx.defeat();
     const t = setInterval(() => setPulse((p) => (p + 1) % 100), 100);
     return () => clearInterval(t);
   }, []);
