@@ -29,7 +29,10 @@ type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: bo
 function isFloor(x: number, y: number): boolean {
   if (y < 0 || y >= ACADEMY_MAP.length) return false;
   if (x < 0 || x >= ACADEMY_MAP[0].length) return false;
-  return ACADEMY_MAP[y][x] === 0;
+  const t = ACADEMY_MAP[y][x];
+  // Walkable tiles: floor (0), npc (3), trial doors, store, skill chamber, arena, sapphire core (9), spike (8), console (10)
+  // Walls (1) and debris (11) block movement
+  return t !== 1 && t !== 11;
 }
 
 function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>): { x: number; y: number } | null {
@@ -244,7 +247,15 @@ export default function GameScreen() {
     else if (tile === 4) setHint('LAUNCH PAD — Press A');
     else if (tile === 2) setHint('TRIAL DOOR — Press A · BOSS');
     else if (tile === 7) setHint('FINAL TRIAL — Press A · ⚠ BOSS');
-    else setHint('');
+    else if (tile === 9) setHint('★ SAPPHIRE CORE — Press A');
+    else if (tile === 10) setHint('POWER CONSOLE — Press A');
+    else if (tile === 8) {
+      // Spike pad damage trigger
+      sfx.damage();
+      applyDamage(10);
+      setHint('⚠ SPIKE TRAP! -10 HP');
+      setTimeout(() => setHint(''), 1500);
+    } else setHint('');
     // Random encounter (only on floor type 0)
     if (tile === 0 && Math.random() < ENCOUNTER_CHANCE) {
       triggerEncounter();
@@ -286,6 +297,23 @@ export default function GameScreen() {
       // Final Trial: Glitch Avatar
       if ((state?.player.level || 0) < 7) { setHint('SYNC TOO LOW. NEED LV 7'); return; }
       router.push({ pathname: '/combat', params: { enemyId: 'glitch_avatar', mode: 'boss' } });
+      return;
+    }
+    if (tile === 9) {
+      // Sapphire Core - objective completed
+      sfx.victory();
+      addGold(500);
+      setHint('★ SAPPHIRE CORE RECOVERED! +500G');
+      setTimeout(() => setHint(''), 3000);
+      saveCheckpoint();
+      return;
+    }
+    if (tile === 10) {
+      // Power Console - heal + small reward
+      sfx.heal();
+      applyHeal(40);
+      setHint('CONSOLE ACTIVATED · +40 HP');
+      setTimeout(() => setHint(''), 2000);
       return;
     }
     // Find nearby NPC (within 1 tile)
@@ -357,13 +385,22 @@ export default function GameScreen() {
               </PixelText>
             </View>
           ))}
-          {/* Player sprite */}
+          {/* Player sprite - layered cyborg look */}
           <View style={[
             styles.player,
-            { left: posRef.current.px - 14, top: posRef.current.py - 18 },
+            { left: posRef.current.px - 14, top: posRef.current.py - 20 },
           ]}>
+            {/* Visor band */}
+            <View style={styles.playerVisor} />
+            {/* Head */}
             <View style={styles.playerHead} />
-            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(state.player.house as any) || 'obsidian']?.color || COLORS.neonCyan }]} />
+            {/* Body / armor */}
+            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(state.player.house as any) || 'obsidian']?.color || COLORS.neonCyan }]}>
+              {/* Chest accent */}
+              <View style={styles.playerChestAccent} />
+            </View>
+            {/* Legs */}
+            <View style={styles.playerLegs} />
           </View>
         </View>
       </View>
@@ -476,13 +513,17 @@ export default function GameScreen() {
 function Tile({ type }: { type: number }) {
   let bg = COLORS.bgDark;
   let inner: any = null;
-  if (type === 0) bg = '#1a1a2e';
-  else if (type === 1) bg = COLORS.bg;
+  if (type === 0) bg = '#1e1e2e'; // floor - dark stone
+  else if (type === 1) bg = '#2a2438'; // wall - stone
   else if (type === 5) { bg = '#2a1a3e'; inner = <PixelText size={14} color={COLORS.neonYellow} bold>$</PixelText>; }
   else if (type === 6) { bg = '#1a2a3e'; inner = <PixelText size={14} color={COLORS.neonMagenta} bold>★</PixelText>; }
   else if (type === 4) { bg = '#3e1a1a'; inner = <PixelText size={14} color={COLORS.neonRed} bold>↑</PixelText>; }
   else if (type === 2) { bg = '#3e2a1a'; inner = <PixelText size={12} color={COLORS.neonMagenta} bold>⚠</PixelText>; }
   else if (type === 7) { bg = '#3e0a3e'; inner = <PixelText size={12} color={COLORS.neonMagenta} glow bold>⚠</PixelText>; }
+  else if (type === 8) { bg = '#3a1010'; inner = <PixelText size={14} color={COLORS.neonRed} bold>▲▲</PixelText>; }
+  else if (type === 9) { bg = '#0a1838'; inner = <PixelText size={20} color={COLORS.neonCyan} glow bold>◆</PixelText>; }
+  else if (type === 10) { bg = '#1a3a3a'; inner = <PixelText size={14} color={COLORS.neonGreen} glow bold>⚙</PixelText>; }
+  else if (type === 11) { bg = '#1a1418'; inner = <PixelText size={14} color={COLORS.textDim} bold>▓▓</PixelText>; }
   return (
     <View style={[styles.tile, { backgroundColor: bg, width: TILE, height: TILE }]}>
       {type === 1 && <View style={styles.wallInner} />}
@@ -505,20 +546,38 @@ const styles = StyleSheet.create({
   floorDot: { position: 'absolute', width: 2, height: 2, backgroundColor: 'rgba(100,100,180,0.3)' },
   player: {
     position: 'absolute',
-    width: 28, height: 36,
+    width: 28, height: 40,
     alignItems: 'center', justifyContent: 'flex-start',
   },
   playerHead: {
-    width: 14, height: 14,
+    width: 14, height: 12,
     backgroundColor: '#ffd5b3',
     borderWidth: 1, borderColor: '#000',
   },
+  playerVisor: {
+    position: 'absolute',
+    top: 4, width: 16, height: 3,
+    backgroundColor: '#00f0ff',
+    zIndex: 5,
+    shadowColor: '#00f0ff', shadowOpacity: 1, shadowRadius: 4,
+  },
   playerBody: {
-    width: 20, height: 18,
-    backgroundColor: COLORS.neonCyan,
+    width: 22, height: 16,
     borderWidth: 1, borderColor: '#000',
     marginTop: -1,
-    shadowColor: COLORS.neonCyan, shadowOpacity: 0.8, shadowRadius: 8,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#fff', shadowOpacity: 0.3, shadowRadius: 4,
+  },
+  playerChestAccent: {
+    width: 6, height: 4,
+    backgroundColor: '#ffd700',
+    borderWidth: 1, borderColor: '#000',
+  },
+  playerLegs: {
+    width: 16, height: 8,
+    backgroundColor: '#202030',
+    borderWidth: 1, borderColor: '#000',
+    marginTop: -1,
   },
   npc: {
     position: 'absolute',

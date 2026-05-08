@@ -34,7 +34,7 @@ export function PixelText({ size = 14, color = COLORS.text, glow, bold, style, c
 
 const styles = StyleSheet.create({
   base: {
-    fontFamily: 'Courier',
-    textTransform: 'uppercase',
+    fontFamily: 'PressStart2P_400Regular',
+    letterSpacing: 0,
   },
 });

@@ -417,13 +417,15 @@ export const ENEMIES: Record<string, Enemy> = {
   crawler_fly: { id: 'crawler_fly', name: 'Crawler-Fly', spriteIndex: 22, hp: 95, atk: 26, def: 6, spd: 18, xp: 78, gold: 55, abilities: ['plasma_blade'], weakness: 'physical', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.5 }] },
   glitch_avatar: { id: 'glitch_avatar', name: 'The Glitch Avatar', spriteIndex: 23, hp: 320, atk: 30, def: 16, spd: 13, xp: 280, gold: 250, abilities: ['mind_control', 'rage_burst', 'rocket_punch'], weakness: 'psi', tier: 4, isBoss: true, phaseAbilities: ['mind_control', 'overload', 'rocket_punch'], phaseQuote: 'I AM EVERYWHERE. I AM YOU.', drops: [{ itemId: 'rare_chip', chance: 1.0 }, { itemId: 'glitch_plate', chance: 0.5 }] },
   glitch_final: { id: 'glitch_final', name: 'Final Form', spriteIndex: 24, hp: 450, atk: 34, def: 20, spd: 15, xp: 500, gold: 500, abilities: ['mind_control', 'overload', 'rocket_punch'], weakness: 'psi', tier: 4, isBoss: true, phaseAbilities: ['mind_control', 'overload', 'rocket_punch', 'rage_burst'], phaseQuote: 'TERMINATION SEQUENCE INITIATED.', drops: [{ itemId: 'rare_chip', chance: 1.0 }, { itemId: 'pulse_cannon', chance: 0.3 }, { itemId: 'glitch_plate', chance: 0.3 }] },
+  // Add Tesla Drone (use Hover-Sentry sprite as drone-like visual)
+  tesla_drone: { id: 'tesla_drone', name: 'Tesla Drone', spriteIndex: 15, hp: 60, atk: 18, def: 5, spd: 15, xp: 35, gold: 25, abilities: ['plasma_blade'], weakness: 'physical', tier: 2, drops: [{ itemId: 'energy_cell', chance: 0.6 }] },
 };
 
 export const ENEMIES_LIST = Object.values(ENEMIES);
 
 // Random encounter pools by zone
 export const ENCOUNTER_POOLS = {
-  academy: ['spider_bot', 'tinkerer_drone'],
+  academy: ['spider_bot', 'tinkerer_drone', 'tesla_drone'],
   arena_t1: ['spider_bot', 'gear_golem', 'clockwork_beast', 'bio_lizard'],
   arena_t2: ['tentacle_mech', 'plasma_brain', 'scrap_collector', 'generator_kin', 'neuro_crab'],
   arena_t3: ['laser_wasp', 'crawler_chimaera', 'steam_mutant', 'multi_gynoid', 'armored_centipede'],
@@ -483,24 +485,25 @@ export function xpForNextLevel(level: number): number {
 }
 
 // ============================================================
-// ACADEMY MAP - simple 20x15 grid
+// ACADEMY MAP - 20x15 grid
 // 0=floor, 1=wall, 2=trial-door (boss), 3=NPC, 4=arena exit, 5=store, 6=skill chamber, 7=final-trial-door
+// 8=spike pad (-10 HP), 9=Sapphire Core, 10=Power Console, 11=debris (collision)
 // ============================================================
 export const ACADEMY_MAP: number[][] = [
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,9,0,1],
+  [1,0,5,0,0,10,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,11,0,1],
   [1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1],
   [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
   [1,0,3,0,0,0,3,0,0,0,0,0,0,0,3,0,2,0,7,1],
-  [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,8,1,0,1,0,0,0,0,0,0,0,1],
   [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
   [1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],
+  [1,0,0,0,0,0,11,0,0,0,0,0,0,0,8,0,0,0,0,1],
   [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
   [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,6,0,0,0,4,0,1],
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
 ];
 
