@@ -17,9 +17,9 @@ import { sfx } from '../src/utils/audio';
 const TILE = 38;
 const SPEED = 4; // pixels per frame
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
-const ROAM_TICK_MS = 900; // how often each roamer tries to move
-const MAX_ROAMERS = 5;
-const CHASE_RADIUS = 4; // tiles - if player within this, enemy chases
+const ROAM_TICK_MS = 2000; // every 2 seconds (per spec)
+const MAX_ROAMERS = 6;
+const CHASE_RADIUS = 4;
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
@@ -49,7 +49,7 @@ function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>):
 
 export default function GameScreen() {
   const { user, loading: authLoading } = useAuth();
-  const { state, setState, loadFromServer, setPosition, saveCheckpoint, applyHeal, addItem } = useGame();
+  const { state, setState, loadFromServer, setPosition, saveCheckpoint, applyHeal, applyDamage, addItem } = useGame();
   const [loaded, setLoaded] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [pauseOpen, setPauseOpen] = useState(false);
@@ -104,13 +104,11 @@ export default function GameScreen() {
     })();
   }, [user]);
 
-  // Re-spawn enemies on focus (after returning from combat)
+  // Spawn roaming enemies on focus (after returning from combat or fresh load)
   useFocusEffect(
     React.useCallback(() => {
       if (!loaded) return;
-      // If we returned from a combat win, the engaged enemy was already removed.
       engagingRef.current = false;
-      // Top up roamers if any were defeated, after a short delay
       const refill = setTimeout(() => {
         const pool = ENCOUNTER_POOLS.academy;
         const cur = roamersRef.current;
@@ -129,7 +127,7 @@ export default function GameScreen() {
         }
         roamersRef.current = fresh;
         setRoamers(fresh);
-      }, 1200);
+      }, 800);
       return () => clearTimeout(refill);
     }, [loaded]),
   );
@@ -355,7 +353,7 @@ export default function GameScreen() {
   const camY = posRef.current.py - SH / 2 - 80;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* World viewport */}
       <View style={styles.world} testID="game-world">
         <View
@@ -406,19 +404,19 @@ export default function GameScreen() {
       </View>
 
       {/* Top HUD */}
-      <View style={styles.hud}>
+      <View style={styles.hud} testID="hud-status">
         <View style={styles.hudLeft}>
-          <PixelText size={12} color={COLORS.neonCyan} bold>{state.player.name.toUpperCase()}</PixelText>
-          <PixelText size={9} color={COLORS.textDim}>LV {state.player.level} · SYNC {state.player.syncLevel}</PixelText>
+          <PixelText size={10} color={COLORS.neonCyan} bold>{state.player.name.toUpperCase()}</PixelText>
+          <PixelText size={7} color={COLORS.textDim} style={{ marginTop: 2 }}>LV{state.player.level} · S{state.player.syncLevel}</PixelText>
         </View>
         <View style={styles.hudBars}>
-          <StatBar label="HP" value={state.player.hp} max={state.player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={120} height={10} />
-          <View style={{ height: 4 }} />
-          <StatBar label="MP" value={state.player.mp} max={state.player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={120} height={10} />
+          <StatBar value={state.player.hp} max={state.player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={110} height={8} showText={false} />
+          <View style={{ height: 2 }} />
+          <StatBar value={state.player.mp} max={state.player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={110} height={8} showText={false} />
         </View>
         <View style={styles.hudRight}>
-          <PixelText size={10} color={COLORS.neonYellow} bold>{state.player.gold}G</PixelText>
-          <PixelText size={9} color={COLORS.xp}>XP {state.player.xp}/{state.player.xpToNext}</PixelText>
+          <PixelText size={9} color={COLORS.neonYellow} bold>{state.player.gold}G</PixelText>
+          <PixelText size={7} color={COLORS.xp} style={{ marginTop: 2 }}>XP{state.player.xp}/{state.player.xpToNext}</PixelText>
         </View>
       </View>
 
@@ -591,8 +589,25 @@ const styles = StyleSheet.create({
   },
   roamer: {
     position: 'absolute',
-    width: TILE - 8, height: TILE - 8,
+    width: TILE - 4, height: TILE - 4,
     alignItems: 'center', justifyContent: 'center',
+  },
+  roamerBg: {
+    width: 34, height: 34,
+    backgroundColor: 'rgba(255,56,96,0.25)',
+    borderWidth: 1, borderColor: COLORS.neonRed,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: COLORS.neonRed,
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  roamerBgChasing: {
+    backgroundColor: 'rgba(255,45,212,0.35)',
+    borderColor: COLORS.neonMagenta,
+    shadowColor: COLORS.neonMagenta,
+    shadowOpacity: 1,
+    shadowRadius: 12,
   },
   roamerGlow: {
     shadowColor: COLORS.neonRed,
@@ -618,8 +633,9 @@ const styles = StyleSheet.create({
     width: 10, height: 10,
   },
   topShortcuts: {
-    position: 'absolute', top: 175, right: 12,
-    flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 250,
+    position: 'absolute', top: 120, right: 8,
+    flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 260,
+    zIndex: 48,
   },
   shortcutBtn: {
     backgroundColor: 'rgba(10,10,20,0.85)',
@@ -633,28 +649,31 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#000',
   },
   hud: {
-    position: 'absolute', top: 90, left: 12, right: 12,
-    flexDirection: 'row', justifyContent: 'space-between',
-    backgroundColor: 'rgba(10,10,20,0.85)',
-    borderWidth: 1, borderColor: COLORS.borderHi,
-    padding: 8, gap: 8,
+    position: 'absolute', top: 0, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: 'rgba(8,8,18,0.95)',
+    borderBottomWidth: 2, borderBottomColor: COLORS.neonCyan,
+    paddingTop: 36, paddingBottom: 6, paddingHorizontal: 10, gap: 8,
+    shadowColor: COLORS.neonCyan, shadowOpacity: 0.4, shadowRadius: 6,
+    zIndex: 50,
   },
   objective: {
-    position: 'absolute', top: 50, left: 12, right: 12,
+    position: 'absolute', top: 78, left: 12, right: 12,
     backgroundColor: 'rgba(10,10,20,0.92)',
     borderWidth: 1, borderColor: COLORS.neonMagenta,
-    paddingHorizontal: 12, paddingVertical: 6,
+    paddingHorizontal: 12, paddingVertical: 5,
     alignItems: 'center',
-    shadowColor: COLORS.neonMagenta, shadowOpacity: 0.5, shadowRadius: 8,
+    zIndex: 49,
   },
   hudLeft: { flex: 1 },
   hudBars: { width: 130 },
   hudRight: { alignItems: 'flex-end' },
   hint: {
-    position: 'absolute', top: 175, alignSelf: 'center',
+    position: 'absolute', top: 165, alignSelf: 'center',
     backgroundColor: 'rgba(10,10,20,0.9)',
     borderWidth: 1, borderColor: COLORS.neonGreen,
     paddingHorizontal: 12, paddingVertical: 6,
+    zIndex: 47,
   },
   dialog: {
     position: 'absolute', bottom: 180, left: 16, right: 16,
