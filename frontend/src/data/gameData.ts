@@ -16,6 +16,9 @@ export const SPRITE_ASSETS = {
   sapphireCore: `${_BE}/api/static/sprites/sapphire_core.png`,
   spikePad: `${_BE}/api/static/sprites/spike_pad.png`,
   barrel: `${_BE}/api/static/sprites/destructible_barrel.png`,
+  npcOrion: `${_BE}/api/static/sprites/npc_orion.png`,
+  npcJax: `${_BE}/api/static/sprites/npc_jax.png`,
+  npcLyra: `${_BE}/api/static/sprites/npc_lyra.png`,
 };
 
 // Color palette (cyberpunk neon on dark)
@@ -528,7 +531,7 @@ export const ACADEMY_MAP: number[][] = [
   // Row 6  — main corridor with NPCs (Orion, Jax, Lyra) + boss door
   [12, 0, 3, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 2, 0, 0,12],
   // Row 7  — patrol corridor with barrels guarding the path
-  [12, 0, 0, 0,14, 0, 0, 0, 0, 0, 0, 0, 0, 0,14, 0, 0, 0, 0,12],
+  [12, 0, 0, 0,14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,14, 0, 0, 0,12],
   // Row 8  — guarded approach: dual spike pads
   [12, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0,12],
   // Row 9  — choke-point corridor (only 3 paths through)

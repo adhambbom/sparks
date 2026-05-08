@@ -492,7 +492,7 @@ export default function GameScreen() {
                       top: y * TILE + (TILE - H) / 2 - 6,
                       width: W, height: H,
                       backgroundColor: 'transparent',
-                      zIndex: 5,
+                      zIndex: 4,    // below scouts (5) so player & enemies always overlay
                     }}
                     resizeMode="contain"
                   />
@@ -501,22 +501,50 @@ export default function GameScreen() {
               return null;
             })
           )}
-          {/* NPCs */}
-          {Object.entries(NPCS).map(([id, npc]) => (
-            <View key={id} style={[styles.npc, { left: npc.x * TILE + 6, top: npc.y * TILE + 4, zIndex: 6 }]}>
-              <View style={styles.npcSprite}>
-                <PixelText size={10} color="#fff" bold>!</PixelText>
+          {/* NPCs — rendered as actual character sprites with name labels */}
+          {Object.entries(NPCS).map(([id, npc]) => {
+            const npcSprite =
+              id === 'npc_orion' ? SPRITE_ASSETS.npcOrion :
+              id === 'npc_jax' ? SPRITE_ASSETS.npcJax :
+              id === 'npc_lyra' ? SPRITE_ASSETS.npcLyra : null;
+            const W = TILE * 1.4;
+            const H = TILE * 1.9;
+            return (
+              <View
+                key={id}
+                style={[
+                  styles.npc,
+                  {
+                    left: npc.x * TILE + (TILE - W) / 2,
+                    top: npc.y * TILE - H + TILE,
+                    width: W,
+                    height: H + 14,
+                    zIndex: 8,
+                  },
+                ]}
+                pointerEvents="none"
+              >
+                {npcSprite ? (
+                  <Image
+                    source={{ uri: npcSprite }}
+                    style={{ width: W, height: H, backgroundColor: 'transparent' }}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <View style={styles.npcSprite}>
+                    <PixelText size={10} color="#fff" bold>!</PixelText>
+                  </View>
+                )}
+                <PixelText size={8} color={COLORS.neonYellow} style={{ marginTop: 1 }}>
+                  {npc.name.split(' ')[0].toUpperCase()}
+                </PixelText>
               </View>
-              <PixelText size={8} color={COLORS.neonYellow} style={{ marginTop: 2 }}>
-                {npc.name.split(' ')[0].toUpperCase()}
-              </PixelText>
-            </View>
-          ))}
+            );
+          })}
           {/* Roaming enemies — Clockwork Scouts (1.5x) and Juggernaut mini-boss (2x) */}
           {roamers.map((r) => {
             const isBoss = r.boss;
             const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
-            // Scouts: 1.5x tile size; Juggernaut: 2.0x tile size
             const W = isBoss ? TILE * 2.0 : TILE * 1.5;
             const H = isBoss ? TILE * 2.0 : TILE * 1.5;
             return (
@@ -529,7 +557,7 @@ export default function GameScreen() {
                     top: r.y * TILE + (TILE - H) / 2 - 6,
                     width: W,
                     height: H,
-                    zIndex: isBoss ? 8 : 7,
+                    zIndex: isBoss ? 6 : 5,   // enemies always BELOW player
                   },
                 ]}
               >
@@ -538,18 +566,20 @@ export default function GameScreen() {
                   style={{ width: W, height: H, backgroundColor: 'transparent' }}
                   resizeMode="contain"
                 />
-                <View style={[
-                  styles.alertDot,
-                  r.chasing && styles.alertDotChasing,
-                  isBoss && { backgroundColor: COLORS.neonMagenta, width: 12, height: 12 },
-                ]} />
+                {r.chasing && (
+                  <View style={[
+                    styles.alertDot,
+                    styles.alertDotChasing,
+                    isBoss && { backgroundColor: COLORS.neonMagenta, width: 10, height: 10 },
+                  ]} />
+                )}
               </View>
             );
           })}
-          {/* Player sprite — mini-ADHAMB pink-armored cyborg, scaled 2.5x */}
+          {/* Player sprite — mini-ADHAMB pink-armored cyborg, scaled 2.5x; ALWAYS on top */}
           {(() => {
-            const W = TILE * 1.7;       // ~65px wide
-            const H = TILE * 2.4;       // ~91px tall (sprite aspect ~1:1.4 from 308x556)
+            const W = TILE * 1.7;
+            const H = TILE * 2.4;
             return (
               <Image
                 source={{ uri: SPRITE_ASSETS.player }}
@@ -560,7 +590,7 @@ export default function GameScreen() {
                   width: W,
                   height: H,
                   backgroundColor: 'transparent',
-                  zIndex: 10,
+                  zIndex: 100,   // always on top of everything
                 }}
                 resizeMode="contain"
               />
@@ -702,7 +732,6 @@ function Tile({ type }: { type: number }) {
     <View style={[styles.tile, { backgroundColor: bg, width: TILE, height: TILE }]}>
       {type === 1 && <View style={styles.wallInner} />}
       {type === 12 && <View style={styles.castleWallInner} />}
-      {type === 0 && <View style={styles.floorDot} />}
       {inner}
     </View>
   );
