@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, ENEMIES, ABILITIES, ITEMS, HOUSES, Element } from '../src/data/gameData';
+import { COLORS, ENEMIES, ABILITIES, ITEMS, HOUSES, Element, SPRITE_ASSETS } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
 import { Sprite } from '../src/components/Sprite';
+import WalkingLegs from '../src/components/WalkingLegs';
 import { useGame } from '../src/contexts/GameContext';
 import { sfx } from '../src/utils/audio';
 
@@ -324,11 +325,29 @@ export default function CombatScreen() {
           ))}
         </Animated.View>
 
-        {/* Player */}
+        {/* Player — same identity as overworld: ADHAMB sprite + procedural legs.
+            Scaled larger and mirrored horizontally so he faces the enemy on the right. */}
         <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }] }]}>
           <View style={styles.playerSprite}>
-            <View style={styles.playerHead} />
-            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(player.house as any) || 'obsidian']?.color || COLORS.neonCyan }, shield && styles.playerShielded]} />
+            {/* Body (top 70%) — clipped + horizontally flipped so ADHAMB faces right toward the enemy */}
+            <View style={{ width: 110, height: 110, overflow: 'hidden' }}>
+              <Image
+                source={{ uri: SPRITE_ASSETS.player }}
+                style={{
+                  width: 110,
+                  height: 158,
+                  backgroundColor: 'transparent',
+                  transform: [{ scaleX: -1 }],   // mirror so he faces the enemy
+                }}
+                resizeMode="contain"
+              />
+            </View>
+            {/* Procedural human legs in idle combat-stance (frame 0 = both planted) */}
+            <View style={{ position: 'absolute', left: 0, top: 100, width: 110, height: 60 }}>
+              <WalkingLegs width={110} height={60} frame={0} style="human" />
+            </View>
+            {/* Optional translucent shield aura when shield buff is up */}
+            {shield && <View style={[styles.playerShielded, { width: 120, height: 170 }]} pointerEvents="none" />}
           </View>
           {floaters.filter(f => f.side === 'p').map(f => (
             <View key={f.id} style={styles.floaterP}>
@@ -453,7 +472,7 @@ const styles = StyleSheet.create({
     paddingLeft: 24,
     marginTop: -40,
   },
-  playerSprite: { width: 60, height: 80, alignItems: 'center' },
+  playerSprite: { width: 130, height: 170, alignItems: 'center', justifyContent: 'flex-start', position: 'relative' },
   playerHead: { width: 24, height: 24, backgroundColor: '#ffd5b3', borderWidth: 2, borderColor: '#000' },
   playerBody: { width: 36, height: 36, backgroundColor: COLORS.neonCyan, borderWidth: 2, borderColor: '#000', marginTop: -1 },
   playerShielded: { borderColor: COLORS.neonCyan, shadowColor: COLORS.neonCyan, shadowOpacity: 1, shadowRadius: 12 },
