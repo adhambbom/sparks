@@ -9,6 +9,7 @@ import { StatBar } from '../src/components/StatBar';
 import { VirtualJoystick } from '../src/components/VirtualJoystick';
 import { ActionButton } from '../src/components/ActionButton';
 import { Sprite } from '../src/components/Sprite';
+import { ActiveSkillPanel } from '../src/components/ActiveSkillPanel';
 import { useGame } from '../src/contexts/GameContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { sfx } from '../src/utils/audio';
@@ -18,11 +19,12 @@ const SPEED = 4; // pixels per frame
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
 const ROAM_TICK_MS = 900; // how often each roamer tries to move
 const MAX_ROAMERS = 5;
+const CHASE_RADIUS = 4; // tiles - if player within this, enemy chases
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
 type Dialog = { name: string; lines: string[]; line: number } | null;
-type Roamer = { uid: string; enemyId: string; x: number; y: number };
+type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: boolean };
 
 function isFloor(x: number, y: number): boolean {
   if (y < 0 || y >= ACADEMY_MAP.length) return false;
@@ -58,6 +60,7 @@ export default function GameScreen() {
   const [roamers, setRoamers] = useState<Roamer[]>([]);
   const roamersRef = useRef<Roamer[]>([]);
   const engagingRef = useRef(false);
+  const [skillPanelOpen, setSkillPanelOpen] = useState(false);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -137,29 +140,46 @@ export default function GameScreen() {
       if (cur.length === 0) return;
       const occupied = new Set(cur.map(r => `${r.x},${r.y}`));
       const next = cur.map((r) => {
-        // pick random direction (or stay)
-        const dirs = [
-          { dx: 0, dy: 0 },
-          { dx: 1, dy: 0 },
-          { dx: -1, dy: 0 },
-          { dx: 0, dy: 1 },
-          { dx: 0, dy: -1 },
-        ];
-        const d = dirs[Math.floor(Math.random() * dirs.length)];
-        const nx = r.x + d.dx;
-        const ny = r.y + d.dy;
         const playerTx = lastTileRef.current.x;
         const playerTy = lastTileRef.current.y;
+        const dxToPlayer = playerTx - r.x;
+        const dyToPlayer = playerTy - r.y;
+        const distToPlayer = Math.abs(dxToPlayer) + Math.abs(dyToPlayer);
+
+        // CHASE state: if player within CHASE_RADIUS, move 1 tile toward player
+        let dx = 0, dy = 0;
+        if (distToPlayer > 0 && distToPlayer <= CHASE_RADIUS) {
+          if (Math.abs(dxToPlayer) > Math.abs(dyToPlayer)) {
+            dx = dxToPlayer > 0 ? 1 : -1;
+          } else {
+            dy = dyToPlayer > 0 ? 1 : -1;
+          }
+        } else {
+          // ROAM state: pick random direction (or stay)
+          const dirs = [
+            { dx: 0, dy: 0 },
+            { dx: 1, dy: 0 },
+            { dx: -1, dy: 0 },
+            { dx: 0, dy: 1 },
+            { dx: 0, dy: -1 },
+          ];
+          const d = dirs[Math.floor(Math.random() * dirs.length)];
+          dx = d.dx; dy = d.dy;
+        }
+
+        const nx = r.x + dx;
+        const ny = r.y + dy;
         if (
+          (dx !== 0 || dy !== 0) &&
           isFloor(nx, ny) &&
           !occupied.has(`${nx},${ny}`) &&
           !(nx === playerTx && ny === playerTy)
         ) {
           occupied.delete(`${r.x},${r.y}`);
           occupied.add(`${nx},${ny}`);
-          return { ...r, x: nx, y: ny };
+          return { ...r, x: nx, y: ny, chasing: distToPlayer <= CHASE_RADIUS };
         }
-        return r;
+        return { ...r, chasing: distToPlayer <= CHASE_RADIUS };
       });
       roamersRef.current = next;
       setRoamers(next);
@@ -521,6 +541,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 0 },
   },
+  roamerChasing: {
+    shadowColor: COLORS.neonMagenta,
+    shadowOpacity: 1,
+    shadowRadius: 16,
+  },
   alertDot: {
     position: 'absolute',
     top: -4, right: -2,
@@ -529,9 +554,13 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1, borderColor: '#000',
   },
+  alertDotChasing: {
+    backgroundColor: COLORS.neonMagenta,
+    width: 10, height: 10,
+  },
   topShortcuts: {
-    position: 'absolute', top: 130, right: 12,
-    flexDirection: 'row', gap: 6,
+    position: 'absolute', top: 175, right: 12,
+    flexDirection: 'row', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 250,
   },
   shortcutBtn: {
     backgroundColor: 'rgba(10,10,20,0.85)',
@@ -545,17 +574,25 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#000',
   },
   hud: {
-    position: 'absolute', top: 50, left: 12, right: 12,
+    position: 'absolute', top: 90, left: 12, right: 12,
     flexDirection: 'row', justifyContent: 'space-between',
     backgroundColor: 'rgba(10,10,20,0.85)',
     borderWidth: 1, borderColor: COLORS.borderHi,
     padding: 8, gap: 8,
   },
+  objective: {
+    position: 'absolute', top: 50, left: 12, right: 12,
+    backgroundColor: 'rgba(10,10,20,0.92)',
+    borderWidth: 1, borderColor: COLORS.neonMagenta,
+    paddingHorizontal: 12, paddingVertical: 6,
+    alignItems: 'center',
+    shadowColor: COLORS.neonMagenta, shadowOpacity: 0.5, shadowRadius: 8,
+  },
   hudLeft: { flex: 1 },
   hudBars: { width: 130 },
   hudRight: { alignItems: 'flex-end' },
   hint: {
-    position: 'absolute', top: 130, alignSelf: 'center',
+    position: 'absolute', top: 175, alignSelf: 'center',
     backgroundColor: 'rgba(10,10,20,0.9)',
     borderWidth: 1, borderColor: COLORS.neonGreen,
     paddingHorizontal: 12, paddingVertical: 6,
