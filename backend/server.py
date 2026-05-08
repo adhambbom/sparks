@@ -102,6 +102,7 @@ class LoginRequest(BaseModel):
 
 class CharacterCreate(BaseModel):
     name: str = Field(min_length=1, max_length=20)
+    house: Optional[str] = "obsidian"
 
 class GameStatePayload(BaseModel):
     state: Dict[str, Any]
@@ -117,24 +118,28 @@ class ArenaScoreRequest(BaseModel):
 # ============================================================
 # DEFAULT GAME STATE (matches frontend constants)
 # ============================================================
-def default_game_state(player_name: str = "Spark") -> dict:
+def default_game_state(player_name: str = "Spark", house: str = "obsidian") -> dict:
+    house_stats = {
+        "obsidian": {"hp": 70, "mp": 30, "atk": 14, "def": 6, "spd": 14, "ability": "stealth_strike"},
+        "sapphire": {"hp": 110, "mp": 25, "atk": 10, "def": 12, "spd": 7, "ability": "plasma_aegis"},
+        "emerald":  {"hp": 85, "mp": 40, "atk": 11, "def": 8, "spd": 11, "ability": "vine_barrage"},
+        "ruby":     {"hp": 100, "mp": 25, "atk": 16, "def": 10, "spd": 6, "ability": "ground_slam"},
+    }
+    s = house_stats.get(house, house_stats["obsidian"])
     return {
         "player": {
             "name": player_name,
+            "house": house,
             "level": 1,
             "xp": 0,
             "xpToNext": 100,
-            "hp": 80,
-            "maxHp": 80,
-            "mp": 30,
-            "maxMp": 30,
-            "atk": 12,
-            "def": 8,
-            "spd": 10,
+            "hp": s["hp"], "maxHp": s["hp"],
+            "mp": s["mp"], "maxMp": s["mp"],
+            "atk": s["atk"], "def": s["def"], "spd": s["spd"],
             "syncLevel": 1,
             "gold": 50,
             "skillPoints": 0,
-            "abilities": ["power_strike"],
+            "abilities": ["power_strike", s["ability"]],
             "equipped": {"weapon": "training_baton", "armor": "uniform"},
             "inventory": [
                 {"id": "health_pack", "qty": 3},
@@ -279,7 +284,8 @@ async def refresh_token(request: Request, response: Response):
 # ============================================================
 @api.post("/character/create")
 async def create_character(req: CharacterCreate, user: dict = Depends(get_current_user)):
-    state = default_game_state(req.name)
+    house = req.house if req.house in {"obsidian", "sapphire", "emerald", "ruby"} else "obsidian"
+    state = default_game_state(req.name, house)
     await db.game_saves.update_one(
         {"user_id": user["id"]},
         {"$set": {

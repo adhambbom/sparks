@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS } from '../src/data/gameData';
+import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, HOUSES } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -220,7 +220,7 @@ export default function GameScreen() {
             { left: posRef.current.px - 14, top: posRef.current.py - 18 },
           ]}>
             <View style={styles.playerHead} />
-            <View style={styles.playerBody} />
+            <View style={[styles.playerBody, { backgroundColor: HOUSES[(state.player.house as any) || 'obsidian']?.color || COLORS.neonCyan }]} />
           </View>
         </View>
       </View>

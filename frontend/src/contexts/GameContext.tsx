@@ -5,6 +5,7 @@ import { ITEMS, ABILITIES, xpForNextLevel } from '../data/gameData';
 export type GameState = {
   player: {
     name: string;
+    house?: string;
     level: number;
     xp: number;
     xpToNext: number;
@@ -39,7 +40,7 @@ type GameCtx = {
   saveToServer: () => Promise<void>;
   saveCheckpoint: () => Promise<void>;
   restoreCheckpoint: () => Promise<GameState | null>;
-  createCharacter: (name: string) => Promise<GameState>;
+  createCharacter: (name: string, house?: string) => Promise<GameState>;
   applyDamage: (dmg: number) => void;
   applyHeal: (amt: number) => void;
   applyMpCost: (mp: number) => void;
@@ -106,8 +107,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, [setState]);
 
-  const createCharacter = useCallback(async (name: string) => {
-    const { data } = await api.post('/character/create', { name });
+  const createCharacter = useCallback(async (name: string, house: string = 'obsidian') => {
+    const { data } = await api.post('/character/create', { name, house });
     setState(data.state);
     return data.state as GameState;
   }, [setState]);

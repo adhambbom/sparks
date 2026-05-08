@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, ENEMIES, ABILITIES, ITEMS, Element } from '../src/data/gameData';
+import { COLORS, ENEMIES, ABILITIES, ITEMS, HOUSES, Element } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -327,7 +327,7 @@ export default function CombatScreen() {
         <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }] }]}>
           <View style={styles.playerSprite}>
             <View style={styles.playerHead} />
-            <View style={[styles.playerBody, shield && styles.playerShielded]} />
+            <View style={[styles.playerBody, { backgroundColor: HOUSES[(player.house as any) || 'obsidian']?.color || COLORS.neonCyan }, shield && styles.playerShielded]} />
           </View>
           {floaters.filter(f => f.side === 'p').map(f => (
             <View key={f.id} style={styles.floaterP}>
