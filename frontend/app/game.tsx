@@ -2,23 +2,45 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, HOUSES } from '../src/data/gameData';
+import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
 import { VirtualJoystick } from '../src/components/VirtualJoystick';
 import { ActionButton } from '../src/components/ActionButton';
+import { Sprite } from '../src/components/Sprite';
 import { useGame } from '../src/contexts/GameContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { sfx } from '../src/utils/audio';
 
 const TILE = 38;
 const SPEED = 4; // pixels per frame
-const ENCOUNTER_CHANCE = 0.08; // 8% per tile change
+const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
+const ROAM_TICK_MS = 900; // how often each roamer tries to move
+const MAX_ROAMERS = 5;
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
 type Dialog = { name: string; lines: string[]; line: number } | null;
+type Roamer = { uid: string; enemyId: string; x: number; y: number };
+
+function isFloor(x: number, y: number): boolean {
+  if (y < 0 || y >= ACADEMY_MAP.length) return false;
+  if (x < 0 || x >= ACADEMY_MAP[0].length) return false;
+  return ACADEMY_MAP[y][x] === 0;
+}
+
+function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>): { x: number; y: number } | null {
+  for (let i = 0; i < 50; i++) {
+    const x = Math.floor(Math.random() * (ACADEMY_MAP[0].length - 2)) + 1;
+    const y = Math.floor(Math.random() * (ACADEMY_MAP.length - 2)) + 1;
+    if (!isFloor(x, y)) continue;
+    if (Math.abs(x - avoidX) < 3 && Math.abs(y - avoidY) < 3) continue;
+    if (occupied.has(`${x},${y}`)) continue;
+    return { x, y };
+  }
+  return null;
+}
 
 export default function GameScreen() {
   const { user, loading: authLoading } = useAuth();
@@ -54,9 +76,92 @@ export default function GameScreen() {
       const ty = s.world.position.y;
       posRef.current = { px: tx * TILE + TILE / 2, py: ty * TILE + TILE / 2 };
       lastTileRef.current = { x: tx, y: ty };
+      // Spawn roaming enemies on floor tiles, away from player
+      const occupied = new Set<string>();
+      const placed: Roamer[] = [];
+      const pool = ENCOUNTER_POOLS.academy;
+      for (let i = 0; i < MAX_ROAMERS; i++) {
+        const spot = randomFloorTile(tx, ty, occupied);
+        if (!spot) break;
+        occupied.add(`${spot.x},${spot.y}`);
+        const enemyId = pool[Math.floor(Math.random() * pool.length)];
+        placed.push({ uid: `r${Date.now()}_${i}`, enemyId, x: spot.x, y: spot.y });
+      }
+      roamersRef.current = placed;
+      setRoamers(placed);
+      engagingRef.current = false;
       setLoaded(true);
     })();
   }, [user]);
+
+  // Re-spawn enemies on focus (after returning from combat)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!loaded) return;
+      // If we returned from a combat win, the engaged enemy was already removed.
+      engagingRef.current = false;
+      // Top up roamers if any were defeated, after a short delay
+      const refill = setTimeout(() => {
+        const pool = ENCOUNTER_POOLS.academy;
+        const cur = roamersRef.current;
+        if (cur.length >= MAX_ROAMERS) return;
+        const occupied = new Set(cur.map(r => `${r.x},${r.y}`));
+        const need = MAX_ROAMERS - cur.length;
+        const tx = lastTileRef.current.x;
+        const ty = lastTileRef.current.y;
+        const fresh: Roamer[] = [...cur];
+        for (let i = 0; i < need; i++) {
+          const spot = randomFloorTile(tx, ty, occupied);
+          if (!spot) break;
+          occupied.add(`${spot.x},${spot.y}`);
+          const enemyId = pool[Math.floor(Math.random() * pool.length)];
+          fresh.push({ uid: `r${Date.now()}_${i}_${Math.random()}`, enemyId, x: spot.x, y: spot.y });
+        }
+        roamersRef.current = fresh;
+        setRoamers(fresh);
+      }, 1200);
+      return () => clearTimeout(refill);
+    }, [loaded]),
+  );
+
+  // Roaming enemy movement loop
+  useEffect(() => {
+    if (!loaded) return;
+    const id = setInterval(() => {
+      if (engagingRef.current) return;
+      const cur = roamersRef.current;
+      if (cur.length === 0) return;
+      const occupied = new Set(cur.map(r => `${r.x},${r.y}`));
+      const next = cur.map((r) => {
+        // pick random direction (or stay)
+        const dirs = [
+          { dx: 0, dy: 0 },
+          { dx: 1, dy: 0 },
+          { dx: -1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: 0, dy: -1 },
+        ];
+        const d = dirs[Math.floor(Math.random() * dirs.length)];
+        const nx = r.x + d.dx;
+        const ny = r.y + d.dy;
+        const playerTx = lastTileRef.current.x;
+        const playerTy = lastTileRef.current.y;
+        if (
+          isFloor(nx, ny) &&
+          !occupied.has(`${nx},${ny}`) &&
+          !(nx === playerTx && ny === playerTy)
+        ) {
+          occupied.delete(`${r.x},${r.y}`);
+          occupied.add(`${nx},${ny}`);
+          return { ...r, x: nx, y: ny };
+        }
+        return r;
+      });
+      roamersRef.current = next;
+      setRoamers(next);
+    }, ROAM_TICK_MS);
+    return () => clearInterval(id);
+  }, [loaded]);
 
   // Game loop
   useEffect(() => {
@@ -82,6 +187,20 @@ export default function GameScreen() {
           if (tx !== lastTileRef.current.x || ty !== lastTileRef.current.y) {
             lastTileRef.current = { x: tx, y: ty };
             onTileChange(tx, ty);
+            // Roamer collision check
+            if (!engagingRef.current) {
+              const hit = roamersRef.current.find(r => r.x === tx && r.y === ty);
+              if (hit) {
+                engagingRef.current = true;
+                // remove engaged roamer (defeated optimistically; respawns on focus if needed)
+                const remaining = roamersRef.current.filter(r => r.uid !== hit.uid);
+                roamersRef.current = remaining;
+                setRoamers(remaining);
+                sfx.encounter();
+                router.push({ pathname: '/combat', params: { enemyId: hit.enemyId, mode: 'random' } });
+                dirRef.current = { x: 0, y: 0 };
+              }
+            }
           }
         }
         setRenderTick((t) => (t + 1) % 1000);
@@ -242,6 +361,34 @@ export default function GameScreen() {
         </View>
       </View>
 
+      {/* Top action shortcuts */}
+      <View style={styles.topShortcuts}>
+        <TouchableOpacity
+          style={[styles.shortcutBtn, { borderColor: COLORS.neonCyan }]}
+          onPress={() => { sfx.click(); router.push('/inventory'); }}
+          testID="hud-inventory"
+        >
+          <PixelText size={10} color={COLORS.neonCyan} bold>BAG</PixelText>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.shortcutBtn, { borderColor: COLORS.neonMagenta }]}
+          onPress={() => { sfx.click(); router.push('/skills'); }}
+          testID="hud-skills"
+        >
+          <PixelText size={10} color={COLORS.neonMagenta} bold>SKILLS</PixelText>
+          {state.player.skillPoints > 0 && (
+            <View style={styles.spDot}><PixelText size={8} color="#000" bold>{state.player.skillPoints}</PixelText></View>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.shortcutBtn, { borderColor: COLORS.neonYellow }]}
+          onPress={() => { sfx.click(); router.push('/store'); }}
+          testID="hud-store"
+        >
+          <PixelText size={10} color={COLORS.neonYellow} bold>STORE</PixelText>
+        </TouchableOpacity>
+      </View>
+
       {hint ? (
         <View style={styles.hint}>
           <PixelText size={11} color={COLORS.neonGreen} glow bold>{hint}</PixelText>
@@ -358,6 +505,40 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.neonYellow,
     borderWidth: 1, borderColor: '#000',
     alignItems: 'center', justifyContent: 'center',
+  },
+  roamer: {
+    position: 'absolute',
+    width: TILE - 8, height: TILE - 8,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  roamerGlow: {
+    shadowColor: COLORS.neonRed,
+    shadowOpacity: 0.7,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  alertDot: {
+    position: 'absolute',
+    top: -4, right: -2,
+    width: 8, height: 8,
+    backgroundColor: COLORS.neonRed,
+    borderRadius: 4,
+    borderWidth: 1, borderColor: '#000',
+  },
+  topShortcuts: {
+    position: 'absolute', top: 130, right: 12,
+    flexDirection: 'row', gap: 6,
+  },
+  shortcutBtn: {
+    backgroundColor: 'rgba(10,10,20,0.85)',
+    borderWidth: 2, paddingHorizontal: 10, paddingVertical: 6,
+  },
+  spDot: {
+    position: 'absolute', top: -6, right: -6,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: COLORS.neonMagenta,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#000',
   },
   hud: {
     position: 'absolute', top: 50, left: 12, right: 12,
