@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity, Image } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES } from '../src/data/gameData';
+import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -24,15 +24,17 @@ const CHASE_RADIUS = 4;
 const { width: SW, height: SH } = Dimensions.get('window');
 
 type Dialog = { name: string; lines: string[]; line: number } | null;
-type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: boolean };
+type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: boolean; boss?: boolean };
 
-function isFloor(x: number, y: number): boolean {
+function isFloor(x: number, y: number, brokenBarrels?: Set<string>): boolean {
   if (y < 0 || y >= ACADEMY_MAP.length) return false;
   if (x < 0 || x >= ACADEMY_MAP[0].length) return false;
   const t = ACADEMY_MAP[y][x];
-  // Walkable tiles: floor (0), npc (3), trial doors, store, skill chamber, arena, sapphire core (9), spike (8), console (10), castle banner (13)
-  // Walls (1), debris (11), castle walls (12) block movement
-  return t !== 1 && t !== 11 && t !== 12;
+  // Walls (1), debris (11), castle walls (12) always block.
+  // Barrels (14) block unless they've been destroyed.
+  if (t === 1 || t === 11 || t === 12) return false;
+  if (t === 14 && !(brokenBarrels && brokenBarrels.has(`${x},${y}`))) return false;
+  return true;
 }
 
 function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>): { x: number; y: number } | null {
@@ -49,7 +51,7 @@ function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>):
 
 export default function GameScreen() {
   const { user, loading: authLoading } = useAuth();
-  const { state, setState, loadFromServer, setPosition, saveCheckpoint, applyHeal, applyDamage, addItem } = useGame();
+  const { state, setState, loadFromServer, setPosition, saveCheckpoint, applyHeal, applyDamage, addItem, addGold } = useGame();
   const [loaded, setLoaded] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [pauseOpen, setPauseOpen] = useState(false);
@@ -64,6 +66,9 @@ export default function GameScreen() {
   const roamersRef = useRef<Roamer[]>([]);
   const engagingRef = useRef(false);
   const [skillPanelOpen, setSkillPanelOpen] = useState(false);
+  // Destroyed barrels (set of "x,y") — separate from static map
+  const [brokenBarrels, setBrokenBarrels] = useState<Set<string>>(new Set());
+  const brokenBarrelsRef = useRef<Set<string>>(new Set());
 
   useFocusEffect(
     React.useCallback(() => {
@@ -86,16 +91,29 @@ export default function GameScreen() {
       const ty = s.world.position.y;
       posRef.current = { px: tx * TILE + TILE / 2, py: ty * TILE + TILE / 2 };
       lastTileRef.current = { x: tx, y: ty };
-      // Spawn roaming enemies on floor tiles, away from player
+      // Spawn 3 scout roamers + 1 Juggernaut mini-boss patrolling near castle
       const occupied = new Set<string>();
       const placed: Roamer[] = [];
-      const pool = ENCOUNTER_POOLS.academy;
-      for (let i = 0; i < MAX_ROAMERS; i++) {
+      // 3 Clockwork Scouts (random walkable spots)
+      for (let i = 0; i < 3; i++) {
         const spot = randomFloorTile(tx, ty, occupied);
         if (!spot) break;
         occupied.add(`${spot.x},${spot.y}`);
-        const enemyId = pool[Math.floor(Math.random() * pool.length)];
-        placed.push({ uid: `r${Date.now()}_${i}`, enemyId, x: spot.x, y: spot.y });
+        placed.push({ uid: `scout_${Date.now()}_${i}`, enemyId: 'tinkerer_drone', x: spot.x, y: spot.y });
+      }
+      // 1 Juggernaut mini-boss near the castle entrance (around row 5, cols 4-15)
+      let jugSpot: { x: number; y: number } | null = null;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const x = 4 + Math.floor(Math.random() * 12);
+        const y = 5;
+        if (isFloor(x, y) && !occupied.has(`${x},${y}`) && !(x === tx && y === ty)) {
+          jugSpot = { x, y };
+          break;
+        }
+      }
+      if (jugSpot) {
+        occupied.add(`${jugSpot.x},${jugSpot.y}`);
+        placed.push({ uid: `juggernaut_${Date.now()}`, enemyId: 'tesla_drone', x: jugSpot.x, y: jugSpot.y, boss: true });
       }
       roamersRef.current = placed;
       setRoamers(placed);
@@ -201,13 +219,17 @@ export default function GameScreen() {
         };
         const tx = Math.floor(np.px / TILE);
         const ty = Math.floor(np.py / TILE);
-        // Bounds + wall/castle/debris collision
+        // Bounds + wall/castle/debris/barrel collision
+        const targetTile = (ty >= 0 && ty < ACADEMY_MAP.length && tx >= 0 && tx < ACADEMY_MAP[0].length)
+          ? ACADEMY_MAP[ty][tx] : 1;
+        const isBarrelStanding = targetTile === 14 && !brokenBarrelsRef.current.has(`${tx},${ty}`);
         if (
           ty >= 0 && ty < ACADEMY_MAP.length &&
           tx >= 0 && tx < ACADEMY_MAP[0].length &&
-          ACADEMY_MAP[ty][tx] !== 1 &&
-          ACADEMY_MAP[ty][tx] !== 11 &&
-          ACADEMY_MAP[ty][tx] !== 12
+          targetTile !== 1 &&
+          targetTile !== 11 &&
+          targetTile !== 12 &&
+          !isBarrelStanding
         ) {
           posRef.current = np;
           // Check tile change
@@ -323,6 +345,30 @@ export default function GameScreen() {
 
   const onActionB = () => {
     sfx.click();
+    const { x, y } = lastTileRef.current;
+    // Look for an adjacent barrel (4-directional) to smash
+    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    for (const [dx, dy] of dirs) {
+      const bx = x + dx;
+      const by = y + dy;
+      if (by < 0 || by >= ACADEMY_MAP.length || bx < 0 || bx >= ACADEMY_MAP[0].length) continue;
+      if (ACADEMY_MAP[by][bx] !== 14) continue;
+      const key = `${bx},${by}`;
+      if (brokenBarrelsRef.current.has(key)) continue;
+      // Smash it
+      const next = new Set(brokenBarrelsRef.current);
+      next.add(key);
+      brokenBarrelsRef.current = next;
+      setBrokenBarrels(next);
+      sfx.damage();
+      // Reward: small chance of gold
+      const goldDrop = Math.floor(Math.random() * 15) + 5;
+      addGold(goldDrop);
+      setHint(`▒ BARREL SMASHED · +${goldDrop}G`);
+      setTimeout(() => setHint(''), 1500);
+      return;
+    }
+    // No barrel adjacent → open pause menu (legacy behavior)
     setPauseOpen(true);
   };
 
@@ -387,52 +433,107 @@ export default function GameScreen() {
               </PixelText>
             </View>
           ))}
-          {/* Roaming enemies - rusty Clockwork Scout style */}
+          {/* Giant Cyber Castle V2.1 — multi-tile painted overlay (rows 0-3, cols 7-13) */}
+          <Image
+            source={{ uri: SPRITE_ASSETS.cyberCastle }}
+            style={{
+              position: 'absolute',
+              left: 7 * TILE - 8,
+              top: 0 * TILE - 14,
+              width: 7 * TILE + 16,
+              height: 4 * TILE + 14,
+              zIndex: 2,
+            }}
+            resizeMode="contain"
+          />
+          {/* Sapphire Core, Spike Pad, and Destructible Barrel image overlays */}
+          {ACADEMY_MAP.flatMap((row, y) =>
+            row.map((cell, x) => {
+              if (cell === 9) {
+                return (
+                  <Image
+                    key={`core-${x}-${y}`}
+                    source={{ uri: SPRITE_ASSETS.sapphireCore }}
+                    style={{ position: 'absolute', left: x * TILE - 6, top: y * TILE - 14, width: TILE + 12, height: TILE + 18, zIndex: 4 }}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              if (cell === 8) {
+                return (
+                  <Image
+                    key={`spike-${x}-${y}`}
+                    source={{ uri: SPRITE_ASSETS.spikePad }}
+                    style={{ position: 'absolute', left: x * TILE - 4, top: y * TILE - 4, width: TILE + 8, height: TILE + 8, zIndex: 3 }}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              if (cell === 14 && !brokenBarrels.has(`${x},${y}`)) {
+                return (
+                  <Image
+                    key={`barrel-${x}-${y}`}
+                    source={{ uri: SPRITE_ASSETS.barrel }}
+                    style={{ position: 'absolute', left: x * TILE, top: y * TILE - 6, width: TILE, height: TILE + 6, zIndex: 5 }}
+                    resizeMode="contain"
+                  />
+                );
+              }
+              return null;
+            })
+          )}
+          {/* NPCs */}
+          {Object.entries(NPCS).map(([id, npc]) => (
+            <View key={id} style={[styles.npc, { left: npc.x * TILE + 6, top: npc.y * TILE + 4, zIndex: 6 }]}>
+              <View style={styles.npcSprite}>
+                <PixelText size={10} color="#fff" bold>!</PixelText>
+              </View>
+              <PixelText size={8} color={COLORS.neonYellow} style={{ marginTop: 2 }}>
+                {npc.name.split(' ')[0].toUpperCase()}
+              </PixelText>
+            </View>
+          ))}
+          {/* Roaming enemies — Clockwork Scouts and Juggernaut mini-boss */}
           {roamers.map((r) => {
-            const enemy = (ENEMIES as any)[r.enemyId];
+            const isBoss = r.boss;
+            const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
+            const size = isBoss ? TILE + 14 : TILE + 4;
             return (
               <View
                 key={r.uid}
                 style={[
                   styles.roamer,
-                  { left: r.x * TILE - 6, top: r.y * TILE - 8 },
+                  {
+                    left: r.x * TILE + (TILE - size) / 2,
+                    top: r.y * TILE + (TILE - size) / 2 - 4,
+                    width: size,
+                    height: size,
+                    zIndex: isBoss ? 8 : 7,
+                  },
                 ]}
               >
-                <View style={[styles.roamerBg, r.chasing && styles.roamerBgChasing]}>
-                  <Sprite index={enemy?.spriteIndex ?? 0} size={44} />
-                </View>
-                <View style={[styles.alertDot, r.chasing && styles.alertDotChasing]} />
+                <Image
+                  source={{ uri: spriteUri }}
+                  style={{ width: size, height: size }}
+                  resizeMode="contain"
+                />
+                <View style={[
+                  styles.alertDot,
+                  r.chasing && styles.alertDotChasing,
+                  isBoss && { backgroundColor: COLORS.neonMagenta, width: 12, height: 12 },
+                ]} />
               </View>
             );
           })}
-          {/* Player sprite — mini-ADHAMB style: pink-armored cyborg with visor */}
-          <View style={[
-            styles.player,
-            { left: posRef.current.px - 18, top: posRef.current.py - 26 },
-          ]}>
-            {/* Antenna */}
-            <View style={styles.playerAntenna} />
-            {/* Head */}
-            <View style={styles.playerHead}>
-              <View style={styles.playerHair} />
-            </View>
-            {/* Visor band */}
-            <View style={styles.playerVisor} />
-            {/* Body / pink armor with shoulder pads */}
-            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(state.player.house as any) || 'obsidian']?.color || '#ff6fa8' }]}>
-              {/* Chest core / accent */}
-              <View style={styles.playerChestAccent} />
-              {/* Shoulder pads */}
-              <View style={styles.playerShoulderL} />
-              <View style={styles.playerShoulderR} />
-            </View>
-            {/* Belt */}
-            <View style={styles.playerBelt} />
-            {/* Legs */}
-            <View style={styles.playerLegs}>
-              <View style={styles.playerKnee} />
-            </View>
-          </View>
+          {/* Player sprite — mini-ADHAMB pink-armored cyborg (AI-generated PNG) */}
+          <Image
+            source={{ uri: SPRITE_ASSETS.player }}
+            style={[
+              styles.playerSprite,
+              { left: posRef.current.px - 22, top: posRef.current.py - 30 },
+            ]}
+            resizeMode="contain"
+          />
         </View>
       </View>
 
@@ -558,16 +659,16 @@ function Tile({ type }: { type: number }) {
   else if (type === 4) { bg = '#3e1a1a'; inner = <PixelText size={14} color={COLORS.neonRed} bold>↑</PixelText>; }
   else if (type === 2) { bg = '#3e2a1a'; inner = <PixelText size={12} color={COLORS.neonMagenta} bold>⚠</PixelText>; }
   else if (type === 7) { bg = '#3e0a3e'; inner = <PixelText size={12} color={COLORS.neonMagenta} glow bold>⚠</PixelText>; }
-  else if (type === 8) { bg = '#3a1010'; inner = <PixelText size={14} color={COLORS.neonRed} bold>▲▲</PixelText>; }
-  else if (type === 9) { bg = '#0a1838'; inner = <PixelText size={20} color={COLORS.neonCyan} glow bold>◆</PixelText>; }
+  else if (type === 8) { bg = '#1e1e2e'; }  // spike pad - floor bg, image overlay handles visual
+  else if (type === 9) { bg = '#1e1e2e'; }  // sapphire core - floor bg, image overlay
   else if (type === 10) { bg = '#1a3a3a'; inner = <PixelText size={14} color={COLORS.neonGreen} glow bold>⚙</PixelText>; }
   else if (type === 11) { bg = '#1a1418'; inner = <PixelText size={14} color={COLORS.textDim} bold>▓▓</PixelText>; }
-  else if (type === 12) { bg = '#3a2a4e'; }  // castle stone wall - lighter purple-stone
-  else if (type === 13) { bg = '#1e1830'; inner = <PixelText size={14} color={COLORS.neonMagenta} glow bold>♦</PixelText>; }  // castle banner
+  else if (type === 12) { bg = '#1a1428'; }  // castle footprint - dark, big castle image overlays this
+  else if (type === 13) { bg = '#1a1428'; }  // castle interior floor
+  else if (type === 14) { bg = '#1e1e2e'; }  // barrel sits on floor; image overlay handles visual
   return (
     <View style={[styles.tile, { backgroundColor: bg, width: TILE, height: TILE }]}>
       {type === 1 && <View style={styles.wallInner} />}
-      {type === 12 && <View style={styles.castleWallInner} />}
       {type === 0 && <View style={styles.floorDot} />}
       {inner}
     </View>
@@ -597,74 +698,22 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'flex-start',
     zIndex: 10,
   },
-  playerAntenna: {
-    width: 2, height: 5,
-    backgroundColor: '#ff2dd4',
-    marginBottom: 1,
-    shadowColor: '#ff2dd4', shadowOpacity: 1, shadowRadius: 3,
-  },
-  playerHead: {
-    width: 18, height: 16,
-    backgroundColor: '#ffd5b3',
-    borderWidth: 1, borderColor: '#000',
-    alignItems: 'center', justifyContent: 'flex-start',
-  },
-  playerHair: {
-    width: 18, height: 4,
-    backgroundColor: '#3a2418',
-    borderBottomWidth: 1, borderBottomColor: '#000',
-  },
-  playerVisor: {
+  playerSprite: {
     position: 'absolute',
-    top: 11, width: 20, height: 4,
-    backgroundColor: '#00f0ff',
-    borderWidth: 1, borderColor: '#000',
-    zIndex: 5,
-    shadowColor: '#00f0ff', shadowOpacity: 1, shadowRadius: 4,
+    width: 44, height: 60,
+    zIndex: 10,
   },
-  playerBody: {
-    width: 26, height: 18,
-    borderWidth: 1, borderColor: '#000',
-    marginTop: -1,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#fff', shadowOpacity: 0.3, shadowRadius: 4,
-    position: 'relative',
-  },
-  playerChestAccent: {
-    width: 8, height: 6,
-    backgroundColor: '#ffd700',
-    borderWidth: 1, borderColor: '#000',
-  },
-  playerShoulderL: {
-    position: 'absolute', left: -3, top: 0,
-    width: 5, height: 8,
-    backgroundColor: '#7a2a4a',
-    borderWidth: 1, borderColor: '#000',
-  },
-  playerShoulderR: {
-    position: 'absolute', right: -3, top: 0,
-    width: 5, height: 8,
-    backgroundColor: '#7a2a4a',
-    borderWidth: 1, borderColor: '#000',
-  },
-  playerBelt: {
-    width: 24, height: 3,
-    backgroundColor: '#202030',
-    borderWidth: 1, borderColor: '#000',
-    marginTop: -1,
-  },
-  playerLegs: {
-    width: 20, height: 12,
-    backgroundColor: '#202030',
-    borderWidth: 1, borderColor: '#000',
-    marginTop: -1,
-    flexDirection: 'row',
-  },
-  playerKnee: {
-    position: 'absolute', top: 4, left: 8,
-    width: 4, height: 2,
-    backgroundColor: '#00f0ff',
-  },
+  playerAntenna: { display: 'none' },
+  playerHead: { display: 'none' },
+  playerHair: { display: 'none' },
+  playerVisor: { display: 'none' },
+  playerBody: { display: 'none' },
+  playerChestAccent: { display: 'none' },
+  playerShoulderL: { display: 'none' },
+  playerShoulderR: { display: 'none' },
+  playerBelt: { display: 'none' },
+  playerLegs: { display: 'none' },
+  playerKnee: { display: 'none' },
   npc: {
     position: 'absolute',
     width: 30, alignItems: 'center',

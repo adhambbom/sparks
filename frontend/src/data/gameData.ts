@@ -6,6 +6,18 @@
 export const SPRITE_SHEET_URL =
   'https://customer-assets.emergentagent.com/job_emerged-academy/artifacts/ej4v1k4y_1778212150044.png';
 
+// AI-generated production sprites served from the FastAPI backend (/api/static/sprites/)
+const _BE = (process.env.EXPO_PUBLIC_BACKEND_URL || '').replace(/\/$/, '');
+export const SPRITE_ASSETS = {
+  player: `${_BE}/api/static/sprites/player_adhamb.png`,
+  enemyScout: `${_BE}/api/static/sprites/enemy_scout.png`,
+  enemyJuggernaut: `${_BE}/api/static/sprites/enemy_juggernaut.png`,
+  cyberCastle: `${_BE}/api/static/sprites/cyber_castle.png`,
+  sapphireCore: `${_BE}/api/static/sprites/sapphire_core.png`,
+  spikePad: `${_BE}/api/static/sprites/spike_pad.png`,
+  barrel: `${_BE}/api/static/sprites/destructible_barrel.png`,
+};
+
 // Color palette (cyberpunk neon on dark)
 export const COLORS = {
   bg: '#0a0a14',
@@ -489,6 +501,7 @@ export function xpForNextLevel(level: number): number {
 // 0=floor, 1=wall, 2=trial-door (boss), 3=NPC, 4=arena exit, 5=store, 6=skill chamber, 7=final-trial-door
 // 8=spike pad (-10 HP), 9=Sapphire Core, 10=Power Console, 11=debris (collision)
 // 12=castle wall (cyber-stone, blocks), 13=castle banner (decoration on floor, walkable)
+// 14=destructible barrel (blocks, destroyed by B-button)
 // ============================================================
 export const ACADEMY_MAP: number[][] = [
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -496,12 +509,12 @@ export const ACADEMY_MAP: number[][] = [
   [1,0,5,0,0,10,0,12,13,0,0,0,13,12,0,0,0,0,0,1],
   [1,0,0,0,0,0,0,12,0,0,0,0,0,12,0,0,0,11,0,1],
   [1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,1],
-  [1,0,0,0,0,0,0,0,0,0,9,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,14,0,0,0,9,0,0,0,14,0,0,0,0,1],
   [1,0,3,0,0,0,3,0,0,0,0,0,0,0,3,0,2,0,7,1],
-  [1,0,0,0,0,0,0,0,8,1,0,1,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,8,1,0,1,0,14,0,0,0,0,0,1],
   [1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1],
   [1,1,1,0,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1],
-  [1,0,0,0,0,0,11,0,0,0,0,0,0,0,8,0,0,0,0,1],
+  [1,0,0,0,0,0,11,0,0,0,0,0,0,0,8,0,14,0,0,1],
   [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
   [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
   [1,0,0,0,0,0,0,0,0,0,0,0,0,6,0,0,0,4,0,1],

@@ -425,6 +425,13 @@ async def shutdown():
 # Mount router
 app.include_router(api)
 
+# Static files (sprites and other assets) served under /api/static/...
+# Path is /api/static/sprites/<filename>.png  (no extra prefix needed because ingress strips it)
+from fastapi.staticfiles import StaticFiles
+STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR.mkdir(exist_ok=True)
+app.mount("/api/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
 # CORS - allow frontend origin and mobile (no origin)
 app.add_middleware(
     CORSMiddleware,
