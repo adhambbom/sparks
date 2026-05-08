@@ -28,8 +28,8 @@ type Dialog = { name: string; lines: string[]; line: number } | null;
 type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: boolean; boss?: boolean };
 
 function isFloor(x: number, y: number, brokenBarrels?: Set<string>): boolean {
-  // Backward-compatible delegate to canMoveTo (used by spawn helpers)
-  return canMoveTo(x, y, brokenBarrels ?? new Set<string>());
+  // Backward-compatible delegate for spawn helpers — single-tile check.
+  return isTileWalkable(x, y, brokenBarrels ?? new Set<string>());
 }
 
 // ──────────────────────────────────────────────────────────
@@ -44,25 +44,51 @@ const SOLID_TILE_TYPES = new Set<number>([
   12,  // castle stone wall (interior)
 ]);
 
+// Feet-hitbox proportions (relative to TILE).
+// The player sprite is ~2.4× TILE tall, but only the FEET should collide with walls.
+// 70% wide × 45% tall, anchored slightly below the logical position so it sits
+// roughly where the boots are drawn on screen.
+const FEET_W = TILE * 0.70;
+const FEET_H = TILE * 0.45;
+const FEET_DY = TILE * 0.20;   // shift hitbox below logical center toward the feet
+
 /**
- * Returns true if the player can step onto (tx, ty).
- * Performs feet-level collision: walls / debris / castle stone always block;
- * intact barrels (type 14) block until smashed and added to brokenBarrels.
+ * Tile-level walkability check (used by spawn/AI helpers — single tile in/out).
  */
-function canMoveTo(tx: number, ty: number, brokenBarrels: Set<string>): boolean {
-  // 1. Bounds check
+function isTileWalkable(tx: number, ty: number, brokenBarrels: Set<string>): boolean {
   if (ty < 0 || ty >= ACADEMY_MAP.length) return false;
   if (tx < 0 || tx >= ACADEMY_MAP[0].length) return false;
+  const t = ACADEMY_MAP[ty][tx];
+  if (SOLID_TILE_TYPES.has(t)) return false;
+  if (t === 14 && !brokenBarrels.has(`${tx},${ty}`)) return false;
+  return true;
+}
 
-  // 2. Read destination tile type
-  const targetType = ACADEMY_MAP[ty][tx];
+/**
+ * Pixel-level player movement check.
+ * Treats the player's FEET as a small bounding box (FEET_W × FEET_H) and verifies
+ * that every tile the box overlaps is walkable. Stops the player cleanly at tile
+ * boundaries — no sliding inside walls. The head/upper sprite is allowed to render
+ * over wall tiles (zIndex: 9999) without affecting collision.
+ */
+function canMoveTo(npx: number, npy: number, brokenBarrels: Set<string>): boolean {
+  const cx = npx;                 // feet center x = logical x
+  const cy = npy + FEET_DY;       // feet center y = logical y + feet offset
+  const left = cx - FEET_W / 2;
+  const right = cx + FEET_W / 2 - 0.001;   // -ε so right edge on tile boundary doesn't bleed
+  const top = cy - FEET_H / 2;
+  const bottom = cy + FEET_H / 2 - 0.001;
 
-  // 3. Static solid wall family
-  if (SOLID_TILE_TYPES.has(targetType)) return false;
+  const colL = Math.floor(left / TILE);
+  const colR = Math.floor(right / TILE);
+  const rowT = Math.floor(top / TILE);
+  const rowB = Math.floor(bottom / TILE);
 
-  // 4. Intact destructible barrel = solid; smashed barrel = walkable
-  if (targetType === 14 && !brokenBarrels.has(`${tx},${ty}`)) return false;
-
+  for (let r = rowT; r <= rowB; r++) {
+    for (let c = colL; c <= colR; c++) {
+      if (!isTileWalkable(c, r, brokenBarrels)) return false;
+    }
+  }
   return true;
 }
 function isNearNpc(x: number, y: number): boolean {
@@ -256,19 +282,28 @@ export default function GameScreen() {
     const loop = () => {
       const { x: dx, y: dy } = dirRef.current;
       if (dx !== 0 || dy !== 0) {
-        const np = {
-          px: posRef.current.px + dx * SPEED,
-          py: posRef.current.py + dy * SPEED,
-        };
-        // Feet-level collision: floor of pixel-pos = the tile the feet stand on.
-        // The player sprite (~2.4× TILE tall) renders ABOVE this tile via zIndex,
-        // so the head naturally overlays the wall row above without collision.
-        const tx = Math.floor(np.px / TILE);
-        const ty = Math.floor(np.py / TILE);
+        // Try the full diagonal step first; if blocked, try the X- and Y-only
+        // components separately so the player slides cleanly along walls instead
+        // of getting stuck at corners. Collision uses a feet-bounding-box check.
+        const cur = posRef.current;
+        const moveX = dx * SPEED;
+        const moveY = dy * SPEED;
 
-        if (canMoveTo(tx, ty, brokenBarrelsRef.current)) {
-          posRef.current = np;
-          // Check tile change
+        let next = { px: cur.px, py: cur.py };
+        if (canMoveTo(cur.px + moveX, cur.py + moveY, brokenBarrelsRef.current)) {
+          next = { px: cur.px + moveX, py: cur.py + moveY };
+        } else if (moveX !== 0 && canMoveTo(cur.px + moveX, cur.py, brokenBarrelsRef.current)) {
+          next = { px: cur.px + moveX, py: cur.py };          // slide horizontally
+        } else if (moveY !== 0 && canMoveTo(cur.px, cur.py + moveY, brokenBarrelsRef.current)) {
+          next = { px: cur.px, py: cur.py + moveY };          // slide vertically
+        }
+        // else: fully blocked — stay put
+
+        if (next.px !== cur.px || next.py !== cur.py) {
+          posRef.current = next;
+          // Tile-change events: use the SINGLE tile under the feet center
+          const tx = Math.floor(next.px / TILE);
+          const ty = Math.floor((next.py + FEET_DY) / TILE);
           if (tx !== lastTileRef.current.x || ty !== lastTileRef.current.y) {
             lastTileRef.current = { x: tx, y: ty };
             onTileChange(tx, ty);
