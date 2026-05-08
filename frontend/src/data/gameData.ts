@@ -293,6 +293,85 @@ export const ABILITIES: Record<string, Ability> = {
 export const ABILITIES_LIST: Ability[] = Object.values(ABILITIES);
 
 // ============================================================
+// HOUSES - 4 Prototypes (Character Selection)
+// ============================================================
+export const HOUSES_SHEET_URL =
+  'https://customer-assets.emergentagent.com/job_emerged-academy/artifacts/o69idqyg_1778214562128.png';
+
+export type HouseId = 'obsidian' | 'sapphire' | 'emerald' | 'ruby';
+
+export type House = {
+  id: HouseId;
+  name: string;
+  title: string;
+  color: string;
+  bgColor: string;
+  description: string;
+  ability: string;
+  trait: string;
+  signatureAbility: string;
+  stats: { hp: number; mp: number; atk: number; def: number; spd: number };
+  passive?: { hpRegen?: number; critChance?: number; reflect?: number; defBonus?: number };
+};
+
+export const HOUSES: Record<HouseId, House> = {
+  obsidian: {
+    id: 'obsidian',
+    name: 'House Obsidian',
+    title: 'The Stalker',
+    color: '#a85a5a',
+    bgColor: '#1a0e14',
+    description: 'A shadow that strikes first. Built for surgical precision and lethal openers.',
+    ability: 'Stealth Cloak & High Critical Damage',
+    trait: 'Neuro-Internal Metal Spines (+Agility)',
+    signatureAbility: 'stealth_strike',
+    stats: { hp: 70, mp: 30, atk: 14, def: 6, spd: 14 },
+    passive: { critChance: 0.25 },
+  },
+  sapphire: {
+    id: 'sapphire',
+    name: 'House Sapphire',
+    title: 'The Guardian',
+    color: '#3878d4',
+    bgColor: '#0a1428',
+    description: 'A bulwark of plasma. Endures everything the Glitch can throw.',
+    ability: 'Plasma Shield & Knockback Resistance',
+    trait: 'Plasma-Fused Core (+Health pool)',
+    signatureAbility: 'plasma_aegis',
+    stats: { hp: 110, mp: 25, atk: 10, def: 12, spd: 7 },
+    passive: { reflect: 0.15, defBonus: 2 },
+  },
+  emerald: {
+    id: 'emerald',
+    name: 'House Emerald',
+    title: 'The Ascendant',
+    color: '#3eb86b',
+    bgColor: '#0a1e14',
+    description: 'Symbiotic and tireless. Heals over time and reaches what others cannot.',
+    ability: 'Multi-Arm Barrage & Health Regeneration',
+    trait: 'Symbiotic Plant-Arms (Reaches distant targets)',
+    signatureAbility: 'vine_barrage',
+    stats: { hp: 85, mp: 40, atk: 11, def: 8, spd: 11 },
+    passive: { hpRegen: 4 },
+  },
+  ruby: {
+    id: 'ruby',
+    name: 'House Ruby',
+    title: 'The Destroyer',
+    color: '#d83a3a',
+    bgColor: '#1e0a0a',
+    description: 'Earth-shaking force. Hits the hardest, soaks the most physical punishment.',
+    ability: 'Ground Slam & Explosive Melee',
+    trait: 'Hardened Bionic Features (+Physical Defense)',
+    signatureAbility: 'ground_slam',
+    stats: { hp: 100, mp: 25, atk: 16, def: 10, spd: 6 },
+    passive: { defBonus: 3 },
+  },
+};
+
+export const HOUSES_LIST: House[] = [HOUSES.obsidian, HOUSES.sapphire, HOUSES.emerald, HOUSES.ruby];
+
+// ============================================================
 // ENEMIES - Mapped to sprite sheet (5x5 grid, indices 0-24)
 // ============================================================
 export type Enemy = {

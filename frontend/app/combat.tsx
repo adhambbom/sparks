@@ -327,7 +327,7 @@ export default function CombatScreen() {
         <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }] }]}>
           <View style={styles.playerSprite}>
             <View style={styles.playerHead} />
-            <View style={[styles.playerBody, { backgroundColor: HOUSES[(player.house as any) || 'obsidian']?.color || COLORS.neonCyan }, shield && styles.playerShielded]} />
+            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(player.house as any) || 'obsidian']?.color || COLORS.neonCyan }, shield && styles.playerShielded]} />
           </View>
           {floaters.filter(f => f.side === 'p').map(f => (
             <View key={f.id} style={styles.floaterP}>

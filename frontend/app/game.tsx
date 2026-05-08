@@ -220,7 +220,7 @@ export default function GameScreen() {
             { left: posRef.current.px - 14, top: posRef.current.py - 18 },
           ]}>
             <View style={styles.playerHead} />
-            <View style={[styles.playerBody, { backgroundColor: HOUSES[(state.player.house as any) || 'obsidian']?.color || COLORS.neonCyan }]} />
+            <View style={[styles.playerBody, { backgroundColor: HOUSES?.[(state.player.house as any) || 'obsidian']?.color || COLORS.neonCyan }]} />
           </View>
         </View>
       </View>
