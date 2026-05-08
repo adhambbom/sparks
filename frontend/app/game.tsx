@@ -413,15 +413,37 @@ export default function GameScreen() {
     );
   }
 
+  // ──────────────────────────────────────────────────────────
+  // Layout constants — keep gameplay in upper 65% of screen
+  // ──────────────────────────────────────────────────────────
+  // HUD = ~125px (two rows). Controls = bottom 35% of total screen.
+  // Game viewport sits between HUD bottom and controls top.
+  const HUD_HEIGHT = 125;
+  const CONTROLS_BAND_HEIGHT = SH * 0.35;
+  const VIEWPORT_HEIGHT = SH - HUD_HEIGHT - CONTROLS_BAND_HEIGHT;
+  const VIEWPORT_TOP = HUD_HEIGHT;
+
+  // Camera follow: keep player visually centered within the viewport.
   const camX = posRef.current.px - SW / 2;
-  // Camera offset: keeps player vertically centered ABOVE the D-pad/A-B controls.
-  // HUD is ~120px at top; controls occupy ~200px at bottom. Playable midpoint is slightly above screen center.
-  const camY = posRef.current.py - SH / 2 + 40;
+  const camY = posRef.current.py - VIEWPORT_HEIGHT / 2;
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* World viewport */}
-      <View style={styles.world} testID="game-world">
+      {/* World viewport — strictly bounded between HUD bottom and controls top */}
+      <View
+        style={[
+          styles.world,
+          {
+            position: 'absolute',
+            top: VIEWPORT_TOP,
+            left: 0,
+            right: 0,
+            height: VIEWPORT_HEIGHT,
+            overflow: 'hidden',
+          },
+        ]}
+        testID="game-world"
+      >
         <View
           style={{
             position: 'absolute',
@@ -436,17 +458,6 @@ export default function GameScreen() {
               {row.map((cell, x) => (
                 <Tile key={`${x}-${y}`} type={cell} />
               ))}
-            </View>
-          ))}
-          {/* NPCs */}
-          {Object.entries(NPCS).map(([id, npc]) => (
-            <View key={id} style={[styles.npc, { left: npc.x * TILE + 6, top: npc.y * TILE + 4 }]}>
-              <View style={styles.npcSprite}>
-                <PixelText size={10} color="#fff" bold>!</PixelText>
-              </View>
-              <PixelText size={8} color={COLORS.neonYellow} style={{ marginTop: 2 }}>
-                {npc.name.split(' ')[0].toUpperCase()}
-              </PixelText>
             </View>
           ))}
           {/* No giant castle Image overlay — we are now INSIDE Castle V2.1.
