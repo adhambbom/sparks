@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
+import ConcreteFloor from '../src/components/ConcreteFloor';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -124,6 +125,8 @@ export default function GameScreen() {
   // pixel position; tile = floor(p/TILE)
   const posRef = useRef({ px: 0, py: 0 });
   const [renderTick, setRenderTick] = useState(0);
+  // Animation tick — increments at 10 fps so sprites animate even when player stands still.
+  const [animTick, setAnimTick] = useState(0);
   // Roaming enemies state
   const [roamers, setRoamers] = useState<Roamer[]>([]);
   const roamersRef = useRef<Roamer[]>([]);
@@ -132,6 +135,12 @@ export default function GameScreen() {
   // Destroyed barrels (set of "x,y") — separate from static map
   const [brokenBarrels, setBrokenBarrels] = useState<Set<string>>(new Set());
   const brokenBarrelsRef = useRef<Set<string>>(new Set());
+
+  // Drive a 10 fps anim ticker for sprite step/bob animations.
+  useEffect(() => {
+    const id = setInterval(() => setAnimTick((t) => (t + 1) % 1024), 100);
+    return () => clearInterval(id);
+  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -621,12 +630,17 @@ export default function GameScreen() {
             );
           })}
           {/* Roaming enemies — Clockwork Scouts (1.4x) and Juggernaut mini-boss (1.7x).
-              No alert dots — debug indicators removed for production look. */}
+              Each enemy bobs/sways gently to fake a walking/scuttling animation. */}
           {roamers.map((r) => {
             const isBoss = r.boss;
             const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
             const W = isBoss ? TILE * 1.7 : TILE * 1.4;
             const H = isBoss ? TILE * 1.7 : TILE * 1.4;
+            // Per-roamer phase based on uid + animTick → asynchronous gait
+            const uidHash = r.uid.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+            const phase = (animTick + uidHash) * 0.6;
+            const bob = Math.abs(Math.sin(phase)) * (isBoss ? 1.5 : 2); // up-down step
+            const sway = Math.sin(phase * 0.5) * (isBoss ? 2 : 4);       // left-right sway angle
             return (
               <View
                 key={r.uid}
@@ -642,16 +656,29 @@ export default function GameScreen() {
               >
                 <Image
                   source={{ uri: spriteUri }}
-                  style={{ width: W, height: H, backgroundColor: 'transparent' }}
+                  style={{
+                    width: W,
+                    height: H,
+                    backgroundColor: 'transparent',
+                    transform: [
+                      { translateY: -bob },
+                      { rotate: `${sway}deg` },
+                    ],
+                  }}
                   resizeMode="contain"
                 />
               </View>
             );
           })}
-          {/* Player sprite — mini-ADHAMB pink-armored cyborg, ALWAYS on top (zIndex 9999) */}
+          {/* Player sprite — mini-ADHAMB, ALWAYS on top (zIndex 9999).
+              Walking animation only plays when actively moving. */}
           {(() => {
             const W = TILE * 1.7;
             const H = TILE * 2.4;
+            const isMoving = dirRef.current.x !== 0 || dirRef.current.y !== 0;
+            const phase = animTick * 0.9;
+            const bob = isMoving ? Math.abs(Math.sin(phase)) * 3 : 0;
+            const sway = isMoving ? Math.sin(phase * 0.5) * 3 : 0;
             return (
               <Image
                 source={{ uri: SPRITE_ASSETS.player }}
@@ -663,6 +690,10 @@ export default function GameScreen() {
                   height: H,
                   backgroundColor: 'transparent',
                   zIndex: 9999,
+                  transform: [
+                    { translateY: -bob },
+                    { rotate: `${sway}deg` },
+                  ],
                   ...(Platform.OS === 'android' ? { elevation: 30 } : {}),
                 }}
                 resizeMode="contain"
@@ -786,7 +817,6 @@ export default function GameScreen() {
 
 function Tile({ type, x, y }: { type: number; x: number; y: number }) {
   // Wall tiles (1 = outer wall, 12 = castle stone) → procedural BrickWall texture.
-  // Variant uses tile coords so adjacent tiles get subtly different stains/shading.
   if (type === 1 || type === 12) {
     return (
       <View style={[styles.tile, { width: TILE, height: TILE }]}>
@@ -795,10 +825,18 @@ function Tile({ type, x, y }: { type: number; x: number; y: number }) {
     );
   }
 
+  // Floor tile → procedural ConcreteFloor texture (light industrial grey)
+  if (type === 0) {
+    return (
+      <View style={[styles.tile, { width: TILE, height: TILE }]}>
+        <ConcreteFloor size={TILE} variant={(x * 19 + y * 23) % 11} />
+      </View>
+    );
+  }
+
   let bg = COLORS.bgDark;
   let inner: any = null;
-  if (type === 0) bg = '#1e1e2e'; // floor - dark stone
-  else if (type === 5) { bg = '#2a1a3e'; inner = <PixelText size={14} color={COLORS.neonYellow} bold>$</PixelText>; }
+  if (type === 5) { bg = '#2a1a3e'; inner = <PixelText size={14} color={COLORS.neonYellow} bold>$</PixelText>; }
   else if (type === 6) { bg = '#1a2a3e'; inner = <PixelText size={14} color={COLORS.neonMagenta} bold>★</PixelText>; }
   else if (type === 4) { bg = '#3e1a1a'; inner = <PixelText size={14} color={COLORS.neonRed} bold>↑</PixelText>; }
   else if (type === 2) { bg = '#3e2a1a'; inner = <PixelText size={12} color={COLORS.neonMagenta} bold>⚠</PixelText>; }
