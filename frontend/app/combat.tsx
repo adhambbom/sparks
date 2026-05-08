@@ -8,6 +8,7 @@ import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
 import { Sprite } from '../src/components/Sprite';
 import WalkingLegs from '../src/components/WalkingLegs';
+import Floater from '../src/components/Floater';
 import { useGame } from '../src/contexts/GameContext';
 import { sfx } from '../src/utils/audio';
 
@@ -38,6 +39,12 @@ export default function CombatScreen() {
   const playerShake = useRef(new Animated.Value(0)).current;
   const [floaters, setFloaters] = useState<{ id: number; text: string; color: string; side: 'p' | 'e' }[]>([]);
   const flId = useRef(0);
+  const [animTick, setAnimTick] = useState(0);
+  // 10 fps tick drives the enemy breathing animation
+  useEffect(() => {
+    const id = setInterval(() => setAnimTick((t) => (t + 1) % 1024), 100);
+    return () => clearInterval(id);
+  }, []);
 
   if (!state || !enemyData) {
     return (
