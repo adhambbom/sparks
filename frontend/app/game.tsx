@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity, Image, Platform } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
@@ -37,13 +37,23 @@ function isFloor(x: number, y: number, brokenBarrels?: Set<string>): boolean {
   return true;
 }
 
+// Tiles within 1-tile radius of any NPC are reserved — no enemies/barrels/etc. allowed.
+function isNearNpc(x: number, y: number): boolean {
+  for (const id of Object.keys(NPCS)) {
+    const npc = NPCS[id];
+    if (Math.abs(x - npc.x) <= 1 && Math.abs(y - npc.y) <= 1) return true;
+  }
+  return false;
+}
+
 function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>): { x: number; y: number } | null {
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 80; i++) {
     const x = Math.floor(Math.random() * (ACADEMY_MAP[0].length - 2)) + 1;
     const y = Math.floor(Math.random() * (ACADEMY_MAP.length - 2)) + 1;
     if (!isFloor(x, y)) continue;
     if (Math.abs(x - avoidX) < 3 && Math.abs(y - avoidY) < 3) continue;
     if (occupied.has(`${x},${y}`)) continue;
+    if (isNearNpc(x, y)) continue;            // never spawn within 1 tile of any NPC
     return { x, y };
   }
   return null;
@@ -112,7 +122,7 @@ export default function GameScreen() {
       for (let attempt = 0; attempt < 60; attempt++) {
         const x = 6 + Math.floor(Math.random() * 8);
         const y = 5 + Math.floor(Math.random() * 5);
-        if (isFloor(x, y) && !occupied.has(`${x},${y}`) && !(x === tx && y === ty)) {
+        if (isFloor(x, y) && !occupied.has(`${x},${y}`) && !(x === tx && y === ty) && !isNearNpc(x, y)) {
           jugSpot = { x, y };
           break;
         }
@@ -501,7 +511,7 @@ export default function GameScreen() {
               return null;
             })
           )}
-          {/* NPCs — rendered as actual character sprites with name labels */}
+          {/* NPCs — actual sprite + clean centered nameplate */}
           {Object.entries(NPCS).map(([id, npc]) => {
             const npcSprite =
               id === 'npc_orion' ? SPRITE_ASSETS.npcOrion :
@@ -512,16 +522,18 @@ export default function GameScreen() {
             return (
               <View
                 key={id}
-                style={[
-                  styles.npc,
-                  {
-                    left: npc.x * TILE + (TILE - W) / 2,
-                    top: npc.y * TILE - H + TILE,
-                    width: W,
-                    height: H + 14,
-                    zIndex: 8,
-                  },
-                ]}
+                style={{
+                  position: 'absolute',
+                  // Center the NPC sprite horizontally on its tile column.
+                  // The bottom of the sprite sits at the bottom of the tile (so feet stand on tile floor).
+                  left: npc.x * TILE + (TILE - W) / 2,
+                  top: npc.y * TILE - H + TILE,
+                  width: W,
+                  height: H + 16,
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  zIndex: 8,
+                }}
                 pointerEvents="none"
               >
                 {npcSprite ? (
@@ -535,48 +547,43 @@ export default function GameScreen() {
                     <PixelText size={10} color="#fff" bold>!</PixelText>
                   </View>
                 )}
-                <PixelText size={8} color={COLORS.neonYellow} style={{ marginTop: 1 }}>
-                  {npc.name.split(' ')[0].toUpperCase()}
-                </PixelText>
+                <View style={{ marginTop: 1, paddingHorizontal: 3, backgroundColor: 'rgba(0,0,0,0.6)' }}>
+                  <PixelText size={8} color={COLORS.neonYellow}>
+                    {npc.name.split(' ')[0].toUpperCase()}
+                  </PixelText>
+                </View>
               </View>
             );
           })}
-          {/* Roaming enemies — Clockwork Scouts (1.5x) and Juggernaut mini-boss (2x) */}
+          {/* Roaming enemies — Clockwork Scouts (1.4x) and Juggernaut mini-boss (1.7x).
+              No alert dots — debug indicators removed for production look. */}
           {roamers.map((r) => {
             const isBoss = r.boss;
             const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
-            const W = isBoss ? TILE * 2.0 : TILE * 1.5;
-            const H = isBoss ? TILE * 2.0 : TILE * 1.5;
+            const W = isBoss ? TILE * 1.7 : TILE * 1.4;
+            const H = isBoss ? TILE * 1.7 : TILE * 1.4;
             return (
               <View
                 key={r.uid}
-                style={[
-                  {
-                    position: 'absolute',
-                    left: r.x * TILE + (TILE - W) / 2,
-                    top: r.y * TILE + (TILE - H) / 2 - 6,
-                    width: W,
-                    height: H,
-                    zIndex: isBoss ? 6 : 5,   // enemies always BELOW player
-                  },
-                ]}
+                style={{
+                  position: 'absolute',
+                  left: r.x * TILE + (TILE - W) / 2,
+                  top: r.y * TILE + (TILE - H) / 2 - 4,
+                  width: W,
+                  height: H,
+                  zIndex: isBoss ? 6 : 5,
+                }}
+                pointerEvents="none"
               >
                 <Image
                   source={{ uri: spriteUri }}
                   style={{ width: W, height: H, backgroundColor: 'transparent' }}
                   resizeMode="contain"
                 />
-                {r.chasing && (
-                  <View style={[
-                    styles.alertDot,
-                    styles.alertDotChasing,
-                    isBoss && { backgroundColor: COLORS.neonMagenta, width: 10, height: 10 },
-                  ]} />
-                )}
               </View>
             );
           })}
-          {/* Player sprite — mini-ADHAMB pink-armored cyborg, scaled 2.5x; ALWAYS on top */}
+          {/* Player sprite — mini-ADHAMB pink-armored cyborg, ALWAYS on top (zIndex 9999) */}
           {(() => {
             const W = TILE * 1.7;
             const H = TILE * 2.4;
@@ -590,7 +597,8 @@ export default function GameScreen() {
                   width: W,
                   height: H,
                   backgroundColor: 'transparent',
-                  zIndex: 100,   // always on top of everything
+                  zIndex: 9999,
+                  ...(Platform.OS === 'android' ? { elevation: 30 } : {}),
                 }}
                 resizeMode="contain"
               />

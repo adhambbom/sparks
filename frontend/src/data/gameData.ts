@@ -526,12 +526,12 @@ export const ACADEMY_MAP: number[][] = [
   [12, 0, 0, 0, 0, 0, 0,12, 0, 9, 0,12, 0, 0, 0, 0, 0, 0, 0,12],
   // Row 4  — throne chamber inner corridor (entrance from below)
   [12, 0, 0, 0, 0, 0, 0,12, 0, 0, 0,12, 0, 0, 0, 0, 0, 0, 0,12],
-  // Row 5  — south wall of throne chamber + power console + debris
-  [12, 0, 0,10, 0, 0, 0,12,12, 0,12,12, 0, 0, 0,11, 0, 0, 0,12],
+  // Row 5  — south wall of throne chamber + power console + debris (debris kept clear of NPC zone)
+  [12, 0, 0,10, 0, 0, 0,12,12, 0,12,12, 0, 0, 0, 0, 0,11, 0,12],
   // Row 6  — main corridor with NPCs (Orion, Jax, Lyra) + boss door
   [12, 0, 3, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 3, 0, 2, 0, 0,12],
-  // Row 7  — patrol corridor with barrels guarding the path
-  [12, 0, 0, 0,14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,14, 0, 0, 0,12],
+  // Row 7  — patrol corridor with barrels guarding the path (kept clear of NPC zones)
+  [12, 0, 0, 0,14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,14, 0,12],
   // Row 8  — guarded approach: dual spike pads
   [12, 0, 0, 0, 0, 0, 0, 0, 8, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0,12],
   // Row 9  — choke-point corridor (only 3 paths through)
