@@ -101,3 +101,57 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: |
+  Polish the Battle Scene (combat.tsx): upgrade enemy visuals to match the new
+  overworld ADHAMB sprite aesthetic, move/animate the floating damage numbers,
+  and resize/reposition the battle log so it stops crowding the stage.
+
+frontend:
+  - task: "Battle Scene sprite + floater + log polish"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/combat.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: |
+          Replaced sprite-sheet enemy renderer with high-res PNGs (Scout / Juggernaut)
+          via getEnemySpriteUri() heuristic + explicit overrides for all 25 enemies.
+          Added subtle idle bob (animTick-driven), drop shadow ellipse under both
+          combatants, and boss magenta glow ring. Damage/heal numbers now use the
+          animated <Floater /> component (rises + fades) anchored above each target.
+          Battle log restyled to a slim 2-line semi-transparent strip pinned just
+          above the bottom HUD with a cyan accent border. Bundle compiles clean
+          (894 modules, 0 errors). Visual verification via Playwright was blocked
+          by an unrelated UI-side login bug (login POST 200 OK on backend but
+          "Something went wrong" displayed on web — pre-existing, unrelated to
+          this task). User will verify visually in the live game flow.
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 0
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Battle Scene sprite + floater + log polish"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+  - agent: "main"
+    message: |
+      Battle Scene polish landed. Three changes shipped:
+        1) Enemy visuals now use the production PNGs (Scout / Juggernaut) with
+           a per-enemy override map + tier heuristic, plus shadow + idle bob.
+        2) Damage / heal numbers switched to the animated <Floater /> (rise+fade)
+           anchored over each target.
+        3) Battle log is now a slim 2-line strip with cyan accent, pinned above
+           the bottom HUD instead of a 60px tall card crowding the stage.
+      No backend changes. Player will verify visually in the live game.

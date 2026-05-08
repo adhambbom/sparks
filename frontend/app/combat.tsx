@@ -2,11 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, ENEMIES, ABILITIES, ITEMS, HOUSES, Element, SPRITE_ASSETS } from '../src/data/gameData';
+import { COLORS, ENEMIES, ABILITIES, ITEMS, Element, SPRITE_ASSETS } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
-import { Sprite } from '../src/components/Sprite';
 import WalkingLegs from '../src/components/WalkingLegs';
 import Floater from '../src/components/Floater';
 import { useGame } from '../src/contexts/GameContext';
@@ -15,6 +14,51 @@ import { sfx } from '../src/utils/audio';
 type ActionPanel = 'main' | 'skills' | 'items';
 
 const { width: SW } = Dimensions.get('window');
+
+// ----- Enemy sprite picker -----
+// We have two production PNGs (Scout & Juggernaut). Map every enemy to whichever
+// archetype best fits, so combat visuals match the overworld aesthetic.
+function getEnemySpriteUri(
+  enemyId: string,
+  e: { spd: number; def: number; hp: number; isBoss?: boolean },
+): string {
+  const SCOUT = SPRITE_ASSETS.enemyScout;
+  const JUGGER = SPRITE_ASSETS.enemyJuggernaut;
+  const overrides: Record<string, string> = {
+    // Light / fast
+    spider_bot: SCOUT,
+    tinkerer_drone: SCOUT,
+    tesla_drone: SCOUT,
+    laser_wasp: SCOUT,
+    crawler_fly: SCOUT,
+    data_ghost: SCOUT,
+    hover_sentry: SCOUT,
+    clockwork_beast: SCOUT,
+    bio_lizard: SCOUT,
+    plasma_brain: SCOUT,
+    neuro_crab: SCOUT,
+    // Heavy / armored / bosses
+    gear_golem: JUGGER,
+    scrap_collector: JUGGER,
+    piston_ogre: JUGGER,
+    steam_mutant: JUGGER,
+    armored_centipede: JUGGER,
+    mutant_assembler: JUGGER,
+    core_keeper: JUGGER,
+    glitch_avatar: JUGGER,
+    glitch_final: JUGGER,
+    tentacle_mech: JUGGER,
+    crawler_chimaera: JUGGER,
+    multi_gynoid: JUGGER,
+    spike_mutant: JUGGER,
+    bio_serpent: JUGGER,
+    generator_kin: JUGGER,
+  };
+  if (overrides[enemyId]) return overrides[enemyId];
+  // Fallback heuristic
+  if (e.isBoss || e.def >= 9 || e.hp >= 80) return JUGGER;
+  return SCOUT;
+}
 
 export default function CombatScreen() {
   const params = useLocalSearchParams<{ enemyId: string; mode?: string; arenaWave?: string }>();
@@ -322,52 +366,94 @@ export default function CombatScreen() {
           <View style={{ marginTop: 6 }}>
             <StatBar value={enemyHp} max={enemyData.hp} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.hp} bgColor={COLORS.hpBg} width={240} height={10} showText={false} />
           </View>
-          <View style={{ marginTop: 14, alignItems: 'center' }}>
-            <Sprite index={enemyData.spriteIndex} size={140} glow={enemyData.isBoss} />
-          </View>
-          {floaters.filter(f => f.side === 'e').map(f => (
-            <View key={f.id} style={styles.floater}>
-              <PixelText size={20} color={f.color} bold glow>{f.text}</PixelText>
+
+          {/* Hi-res PNG sprite + drop shadow + subtle idle bob.
+              Boss enemies get a magenta glow ring; normal enemies use a dark elliptical ground shadow. */}
+          <View style={styles.enemySpriteWrap}>
+            {/* Ground shadow */}
+            <View style={[
+              styles.groundShadow,
+              { width: enemyData.isBoss ? 130 : 110 },
+            ]} pointerEvents="none" />
+            {/* Sprite (idle bob) */}
+            <Animated.View
+              style={{
+                transform: [{ translateY: Math.sin(animTick * 0.35) * 3 }],
+              }}
+            >
+              <View style={[
+                styles.enemySpriteBox,
+                enemyData.isBoss && styles.enemySpriteBoxBoss,
+                { width: enemyData.isBoss ? 180 : 156, height: enemyData.isBoss ? 180 : 156 },
+              ]}>
+                <Image
+                  source={{ uri: getEnemySpriteUri(enemyId, enemyData) }}
+                  style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
+                  resizeMode="contain"
+                />
+              </View>
+            </Animated.View>
+
+            {/* Animated rising damage numbers (centered above the enemy sprite) */}
+            <View style={styles.floaterEAnchor} pointerEvents="none">
+              {floaters.filter(f => f.side === 'e').map(f => (
+                <Floater key={f.id} text={f.text} color={f.color} size={24} />
+              ))}
             </View>
-          ))}
+          </View>
         </Animated.View>
 
         {/* Player — same identity as overworld: ADHAMB sprite + procedural legs.
             Scaled larger and mirrored horizontally so he faces the enemy on the right. */}
         <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }] }]}>
           <View style={styles.playerSprite}>
-            {/* Body (top 70%) — clipped + horizontally flipped so ADHAMB faces right toward the enemy */}
-            <View style={{ width: 110, height: 110, overflow: 'hidden' }}>
-              <Image
-                source={{ uri: SPRITE_ASSETS.player }}
-                style={{
-                  width: 110,
-                  height: 158,
-                  backgroundColor: 'transparent',
-                  transform: [{ scaleX: -1 }],   // mirror so he faces the enemy
-                }}
-                resizeMode="contain"
-              />
-            </View>
-            {/* Procedural human legs in idle combat-stance (frame 0 = both planted) */}
-            <View style={{ position: 'absolute', left: 0, top: 100, width: 110, height: 60 }}>
-              <WalkingLegs width={110} height={60} frame={0} style="human" />
-            </View>
+            {/* Ground shadow */}
+            <View style={styles.playerGroundShadow} pointerEvents="none" />
+            {/* Body (top 70%) — clipped + horizontally flipped so ADHAMB faces right toward the enemy.
+                Subtle idle bob synced with the same animTick as the enemy. */}
+            <Animated.View
+              style={{
+                transform: [{ translateY: Math.sin(animTick * 0.35 + Math.PI) * 2.5 }],
+              }}
+            >
+              <View style={{ width: 110, height: 110, overflow: 'hidden' }}>
+                <Image
+                  source={{ uri: SPRITE_ASSETS.player }}
+                  style={{
+                    width: 110,
+                    height: 158,
+                    backgroundColor: 'transparent',
+                    transform: [{ scaleX: -1 }],   // mirror so he faces the enemy
+                  }}
+                  resizeMode="contain"
+                />
+              </View>
+              {/* Procedural human legs in idle combat-stance (frame 0 = both planted) */}
+              <View style={{ position: 'absolute', left: 0, top: 100, width: 110, height: 60 }}>
+                <WalkingLegs width={110} height={60} frame={0} style="human" />
+              </View>
+            </Animated.View>
             {/* Optional translucent shield aura when shield buff is up */}
             {shield && <View style={[styles.playerShielded, { width: 120, height: 170 }]} pointerEvents="none" />}
           </View>
-          {floaters.filter(f => f.side === 'p').map(f => (
-            <View key={f.id} style={styles.floaterP}>
-              <PixelText size={18} color={f.color} bold glow>{f.text}</PixelText>
-            </View>
-          ))}
+          {/* Animated rising damage / heal numbers above the player */}
+          <View style={styles.floaterPAnchor} pointerEvents="none">
+            {floaters.filter(f => f.side === 'p').map(f => (
+              <Floater key={f.id} text={f.text} color={f.color} size={20} />
+            ))}
+          </View>
         </Animated.View>
       </View>
 
-      {/* Log */}
-      <View style={styles.logBox}>
-        {log.slice(-3).map((l, i) => (
-          <PixelText key={i} size={11} color={i === log.length - 1 ? COLORS.text : COLORS.textDim}>
+      {/* Battle log — slim 2-line overlay just above the bottom HUD so it never crowds the stage. */}
+      <View style={styles.logBox} pointerEvents="none">
+        {log.slice(-2).map((l, i, arr) => (
+          <PixelText
+            key={`${i}-${l}`}
+            size={10}
+            color={i === arr.length - 1 ? COLORS.text : COLORS.textDim}
+            numberOfLines={1}
+          >
             {l}
           </PixelText>
         ))}
@@ -469,6 +555,34 @@ const styles = StyleSheet.create({
   },
   enemyBox: { alignItems: 'center', minHeight: 240 },
   enemyHeaderRow: { flexDirection: 'row', alignItems: 'center' },
+  // Wraps the enemy sprite + ground shadow together; positions the floater anchor.
+  enemySpriteWrap: {
+    marginTop: 14,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    position: 'relative',
+  },
+  enemySpriteBox: {
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  enemySpriteBoxBoss: {
+    // Subtle magenta glow ring for boss enemies
+    shadowColor: COLORS.neonMagenta,
+    shadowOpacity: 0.9,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  // Dark elliptical ground shadow under each enemy sprite
+  groundShadow: {
+    position: 'absolute',
+    bottom: -2,
+    height: 14,
+    borderRadius: 100,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignSelf: 'center',
+  },
   phaseFlash: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(255,45,212,0.25)',
@@ -479,17 +593,54 @@ const styles = StyleSheet.create({
     paddingLeft: 24,
     marginTop: -40,
   },
-  playerSprite: { width: 130, height: 170, alignItems: 'center', justifyContent: 'flex-start', position: 'relative' },
+  playerSprite: {
+    width: 130,
+    height: 170,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    position: 'relative',
+  },
+  playerGroundShadow: {
+    position: 'absolute',
+    bottom: 4,
+    width: 90,
+    height: 12,
+    borderRadius: 100,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignSelf: 'center',
+  },
   playerHead: { width: 24, height: 24, backgroundColor: '#ffd5b3', borderWidth: 2, borderColor: '#000' },
   playerBody: { width: 36, height: 36, backgroundColor: COLORS.neonCyan, borderWidth: 2, borderColor: '#000', marginTop: -1 },
   playerShielded: { borderColor: COLORS.neonCyan, shadowColor: COLORS.neonCyan, shadowOpacity: 1, shadowRadius: 12 },
-  floater: { position: 'absolute', top: 30, alignSelf: 'center' },
-  floaterP: { position: 'absolute', top: -10, left: 50 },
+
+  // Anchors for the animated <Floater /> rising-numbers — positioned just above each target sprite.
+  floaterEAnchor: {
+    position: 'absolute',
+    top: -4,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  floaterPAnchor: {
+    position: 'absolute',
+    top: -4,
+    left: 0,
+    width: 130,
+    alignItems: 'center',
+    zIndex: 50,
+  },
+
+  // Slim battle-log strip pinned just above the bottom HUD.
   logBox: {
-    marginHorizontal: 16,
-    backgroundColor: 'rgba(10,10,20,0.85)',
-    borderWidth: 1, borderColor: COLORS.borderHi,
-    padding: 8, minHeight: 60,
+    marginHorizontal: 12,
+    marginBottom: 4,
+    backgroundColor: 'rgba(10,10,20,0.72)',
+    borderLeftWidth: 2,
+    borderLeftColor: COLORS.neonCyan,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minHeight: 30,
   },
   bottomHud: {
     backgroundColor: COLORS.panel,
