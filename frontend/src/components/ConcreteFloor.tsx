@@ -14,21 +14,21 @@ import Svg, { Rect, Line, Circle } from 'react-native-svg';
  */
 
 // ── Palette ─────────────────────────────────────────────────────────────
-// Cinematic stone-tile palette: dark enough for the cyber-castle vibe but
-// noticeably brighter than the wall charcoal (#2e2e2e) so floor reads as
-// FLOOR and the neon HUD pops harder. Cool blue-grey hue ties together the
-// brick walls and the magenta accents without ever competing with them.
-const BASE_LIGHT    = '#525a66';   // primary stone (cool steel-grey, +20% over the old #3f4750)
-const BASE_DARKER   = '#3f4753';   // shaded panel
-const BASE_LIGHTER  = '#5e6772';   // highlighted patch
-const SEAM_COLOR    = '#1f2330';   // panel seams (deep crevice)
-const CRACK_COLOR   = 'rgba(8, 10, 14, 0.65)';
-const GRIT_DARK     = 'rgba(15, 18, 24, 0.45)';
-const GRIT_LIGHT    = 'rgba(150, 168, 188, 0.32)';
-const STAIN_OIL     = 'rgba(0, 0, 0, 0.40)';
-// Specular highlight added to the top-left corner of each tile so the floor
-// catches a faint "key light" — sells depth without breaking the pixel-art look.
-const SPEC_HIGHLIGHT = 'rgba(220, 230, 245, 0.10)';
+// Deep cyber-castle stone — much darker than walls so the bright characters
+// (pink/cyan ADHAMB, neon enemies) read as the focal point. The cool steel
+// hue still ties everything together; specular key-light keeps the floor from
+// going flat.
+const BASE_LIGHT    = '#2c333d';   // primary stone (deep cool steel)
+const BASE_DARKER   = '#222831';   // shaded panel
+const BASE_LIGHTER  = '#353e48';   // highlighted patch
+const SEAM_COLOR    = '#13171f';   // panel seams (near-black crevice)
+const CRACK_COLOR   = 'rgba(0, 0, 0, 0.55)';
+const GRIT_DARK     = 'rgba(0, 0, 0, 0.40)';
+const GRIT_LIGHT    = 'rgba(140, 158, 178, 0.22)';
+const STAIN_OIL     = 'rgba(0, 0, 0, 0.35)';
+// Top-left specular streak — keeps floor from going flat against the dark
+// palette by simulating a faint upper-left key light reflection.
+const SPEC_HIGHLIGHT = 'rgba(220, 230, 245, 0.08)';
 
 // Deterministic pseudo-random per (variant, salt)
 function rand(variant: number, salt: number): number {
