@@ -28,7 +28,15 @@ const CHASE_RADIUS = 4;
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
-type Dialog = { name: string; lines: string[]; line: number } | null;
+type Dialog = {
+  name: string;
+  lines: string[];
+  line: number;
+  /** Called once after the dialog reaches its final line and is closed —
+   *  used to chain into the store / skill-tree screens after Jax / Lyra
+   *  finish their pitch. */
+  onComplete?: () => void;
+} | null;
 type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: boolean; boss?: boolean };
 
 function isFloor(x: number, y: number, brokenBarrels?: Set<string>): boolean {
@@ -427,8 +435,15 @@ export default function GameScreen() {
     // Talk to nearby NPC, enter store, etc.
     if (dialog) {
       // advance dialog
-      if (dialog.line + 1 < dialog.lines.length) setDialog({ ...dialog, line: dialog.line + 1 });
-      else setDialog(null);
+      if (dialog.line + 1 < dialog.lines.length) {
+        setDialog({ ...dialog, line: dialog.line + 1 });
+      } else {
+        // Final line — close dialog and chain into the NPC's follow-up action
+        // (Jax → store, Lyra → skill tree, Orion → no-op).
+        const cb = dialog.onComplete;
+        setDialog(null);
+        if (cb) cb();
+      }
       return;
     }
     const { x, y } = lastTileRef.current;
@@ -512,9 +527,20 @@ export default function GameScreen() {
       return;
     }
     // Find nearby NPC (within 1 tile)
-    const npc = Object.values(NPCS).find(n => Math.abs(n.x - x) <= 1 && Math.abs(n.y - y) <= 1);
-    if (npc) {
-      setDialog({ name: npc.name, lines: npc.lines, line: 0 });
+    const npcEntry = Object.entries(NPCS).find(
+      ([_id, n]) => Math.abs(n.x - x) <= 1 && Math.abs(n.y - y) <= 1,
+    );
+    if (npcEntry) {
+      const [npcId, npc] = npcEntry;
+      // Each NPC's "follow-up" runs after the dialog finishes:
+      //   • Jax  → store      • Lyra → skill tree      • Orion → no-op (hint only)
+      const followUp =
+        npcId === 'npc_jax'
+          ? () => router.push('/store')
+          : npcId === 'npc_lyra'
+          ? () => router.push('/skills')
+          : undefined;
+      setDialog({ name: npc.name, lines: npc.lines, line: 0, onComplete: followUp });
       return;
     }
 

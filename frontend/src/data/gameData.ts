@@ -552,14 +552,18 @@ export const NPCS: Record<string, { name: string; x: number; y: number; lines: s
   npc_orion: { name: 'Prof. Orion', x: 2, y: 6, lines: [
     'Welcome to Nexus, Spark.',
     'The Glitch grows stronger by the hour...',
+    'TIP: Smash barrels with [A] for spare credits.',
+    'TIP: The Sapphire Core opens the path beyond.',
     'Train hard. The Outside awaits at Sync Lv 5.',
   ]},
-  npc_jax: { name: 'Jax', x: 6, y: 6, lines: [
-    'Heh. Another sparkler thinks they can match me?',
-    'Grow some power and we will duel in the Arena.',
+  npc_jax: { name: 'Jax — Quartermaster', x: 6, y: 6, lines: [
+    'Hey kid, fresh off the lift?',
+    'I run the Quartermaster stand — potions, sparks, the works.',
+    'Show me your gold. Press [A] again to browse my wares.',
   ]},
-  npc_lyra: { name: 'Lyra (Tech-Lab)', x: 14, y: 6, lines: [
-    'Need an upgrade? The store has everything.',
-    'Random Glitch parts? Save those—they sell well.',
+  npc_lyra: { name: 'Lyra — Tech-Lab', x: 14, y: 6, lines: [
+    'You feel that hum? That is raw skill-energy waiting to be forged.',
+    'Spend Skill Points at the Tech-Lab — every upgrade tilts the next fight in your favour.',
+    'Press [A] again to open your skill tree.',
   ]},
 };
