@@ -264,3 +264,30 @@ agent_communication:
         3) Battle log is now a slim 2-line strip with cyan accent, pinned above
            the bottom HUD instead of a 60px tall card crowding the stage.
       No backend changes. Player will verify visually in the live game.
+
+  - agent: "main"
+    message: |
+      Native APK fixes (user reported via Play Store APK):
+        1) NO SFX ON ANDROID — root cause: src/utils/audio.ts only used the
+           Web Audio API, which doesn't exist on native. Solution:
+           • Added /app/frontend/scripts/generate_sfx.py to synthesise 16 short
+             8-bit-style WAV files (~205KB total) into assets/audio/.
+           • Rewrote audio.ts so that on Platform.OS !== 'web' it loads each
+             WAV via expo-audio's createAudioPlayer() (one cached player per
+             SFX), seeks to 0 and plays. Web path keeps oscillator synth.
+           • Added ensureAudioMode() called from app/_layout.tsx so iOS plays
+             in silent mode and the audio session is configured before first
+             playback.
+        2) CHARACTER LAG ON ANDROID — root cause: game.tsx fired up to 2
+           setRenderTick() per RAF tick (movement + camera lerp) and re-built
+           the entire 20×15 tile grid + sprite overlays (~600 components) on
+           every render. Solution:
+           • Coalesced both setState calls into ONE per frame guarded by a
+             `dirty` flag (skipped entirely when player+camera are settled).
+           • Memoised the static tile grid (no deps) and the static overlay
+             layer (sapphire core, spike pads, barrels, staircase) keyed on
+             [brokenBarrels, animTick] — so on Android the static layer
+             re-renders ~10 fps instead of ~60 fps during movement.
+      Bundle compiles cleanly, web title screen renders unchanged. Play
+      Store APK must be rebuilt & re-uploaded (EAS Build) to ship these
+      fixes — current APK on the store does NOT have them.

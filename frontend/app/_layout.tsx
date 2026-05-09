@@ -6,11 +6,18 @@ import { View, ActivityIndicator } from 'react-native';
 import { useFonts, PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { GameProvider } from '../src/contexts/GameContext';
+import { ensureAudioMode } from '../src/utils/audio';
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     PressStart2P_400Regular,
   });
+
+  // Configure native audio session once (iOS silent-mode playback,
+  // background behaviour). No-op on web.
+  useEffect(() => {
+    ensureAudioMode();
+  }, []);
 
   if (!fontsLoaded) {
     return (

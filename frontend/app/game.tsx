@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity, Image, Platform } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -317,6 +317,10 @@ export default function GameScreen() {
     if (!loaded) return;
     let raf: any;
     const loop = () => {
+      // Track whether anything visually changed this frame so we re-render
+      // AT MOST ONCE per RAF tick (was up to 2× — was the main Android lag
+      // source because each setState re-mounts ~600 tile/sprite components).
+      let dirty = false;
       const { x: dx, y: dy } = dirRef.current;
       if (dx !== 0 || dy !== 0) {
         // Try the full diagonal step first; if blocked, try the X- and Y-only
@@ -338,6 +342,7 @@ export default function GameScreen() {
 
         if (next.px !== cur.px || next.py !== cur.py) {
           posRef.current = next;
+          dirty = true;
           // Tile-change events: use the SINGLE tile under the feet center
           const tx = Math.floor(next.px / TILE);
           const ty = Math.floor((next.py + FEET_DY) / TILE);
@@ -370,7 +375,6 @@ export default function GameScreen() {
             }
           }
         }
-        setRenderTick((t) => (t + 1) % 1000);
       }
       // Camera follow — lerp the camera position toward the player every
       // frame so the world glides instead of hard-snapping at high SPEED.
@@ -384,11 +388,16 @@ export default function GameScreen() {
         const dyC = target.py - cam.y;
         if (Math.abs(dxC) > 0.5 || Math.abs(dyC) > 0.5) {
           camRef.current = { x: cam.x + dxC * 0.32, y: cam.y + dyC * 0.32 };
-          setRenderTick((t) => (t + 1) % 1000);
+          dirty = true;
         } else if (cam.x !== target.px || cam.y !== target.py) {
           camRef.current = { x: target.px, y: target.py };
+          dirty = true;
         }
       }
+      // Re-render at most ONCE per frame, only when the player or camera
+      // actually moved. Keeps idle CPU near zero and halves the render rate
+      // during movement vs. the previous double-setState path.
+      if (dirty) setRenderTick((t) => (t + 1) % 1000);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -604,6 +613,109 @@ export default function GameScreen() {
   const camX = Math.round(camRef.current.x - SW / 2);
   const camY = Math.round(camRef.current.y - VIEWPORT_HEIGHT / 2);
 
+  // ──────────────────────────────────────────────────────────
+  // Memoized static map render
+  // ──────────────────────────────────────────────────────────
+  // The 20×15 tile grid + sprite overlays = 600+ components per render.
+  // Re-creating them every RAF tick during movement (60fps) was the main
+  // cause of jank on lower-end Android devices. By memoizing on the inputs
+  // that actually change (brokenBarrels, animTick), we cut the work to
+  // ~10 renders/sec for the static layer regardless of player movement.
+  const tileGrid = useMemo(
+    () =>
+      ACADEMY_MAP.map((row, y) => (
+        <View key={y} style={{ flexDirection: 'row' }}>
+          {row.map((cell, x) => (
+            <Tile key={`${x}-${y}`} type={cell} x={x} y={y} />
+          ))}
+        </View>
+      )),
+    []
+  );
+
+  const staticOverlays = useMemo(
+    () =>
+      ACADEMY_MAP.flatMap((row, y) =>
+        row.map((cell, x) => {
+          if (cell === 9) {
+            const W = TILE * 1.8, H = TILE * 2.0;
+            return (
+              <Image
+                key={`core-${x}-${y}`}
+                source={{ uri: SPRITE_ASSETS.sapphireCore }}
+                style={{
+                  position: 'absolute',
+                  left: x * TILE + (TILE - W) / 2,
+                  top: y * TILE + (TILE - H) / 2 - 8,
+                  width: W, height: H,
+                  backgroundColor: 'transparent',
+                  zIndex: 4,
+                }}
+                resizeMode="contain"
+              />
+            );
+          }
+          if (cell === 8) {
+            const W = TILE * 1.8, H = TILE * 1.4;
+            return (
+              <Image
+                key={`spike-${x}-${y}`}
+                source={{ uri: SPRITE_ASSETS.spikePad }}
+                style={{
+                  position: 'absolute',
+                  left: x * TILE + (TILE - W) / 2,
+                  top: y * TILE + (TILE - H) / 2 + 2,
+                  width: W, height: H,
+                  backgroundColor: 'transparent',
+                  zIndex: 3,
+                }}
+                resizeMode="contain"
+              />
+            );
+          }
+          if (cell === 14 && !brokenBarrels.has(`${x},${y}`)) {
+            const W = TILE * 1.4, H = TILE * 1.8;
+            return (
+              <Image
+                key={`barrel-${x}-${y}`}
+                source={{ uri: SPRITE_ASSETS.barrel }}
+                style={{
+                  position: 'absolute',
+                  left: x * TILE + (TILE - W) / 2,
+                  top: y * TILE + (TILE - H) / 2 - 6,
+                  width: W, height: H,
+                  backgroundColor: 'transparent',
+                  zIndex: 4,    // below scouts (5) so player & enemies always overlay
+                }}
+                resizeMode="contain"
+              />
+            );
+          }
+          if (cell === 15) {
+            // Procedurally rendered spiral staircase (downward exit).
+            return (
+              <View
+                key={`stairs-${x}-${y}`}
+                style={{
+                  position: 'absolute',
+                  left: x * TILE,
+                  top: y * TILE,
+                  width: TILE,
+                  height: TILE,
+                  zIndex: 3,
+                }}
+                pointerEvents="none"
+              >
+                <SpiralStaircase tile={TILE} tick={animTick} />
+              </View>
+            );
+          }
+          return null;
+        })
+      ),
+    [brokenBarrels, animTick]
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* World viewport — strictly bounded between HUD bottom and controls top */}
@@ -630,94 +742,12 @@ export default function GameScreen() {
             height: ACADEMY_MAP.length * TILE,
           }}
         >
-          {ACADEMY_MAP.map((row, y) => (
-            <View key={y} style={{ flexDirection: 'row' }}>
-              {row.map((cell, x) => (
-                <Tile key={`${x}-${y}`} type={cell} x={x} y={y} />
-              ))}
-            </View>
-          ))}
+          {tileGrid}
           {/* No giant castle Image overlay — we are now INSIDE Castle V2.1.
               Stone walls (type 12) form the corridors and rooms; banners (13) decorate the throne chamber. */}
-          {/* Sapphire Core, Spike Pad, and Destructible Barrel image overlays (1.8x scaled) */}
-          {ACADEMY_MAP.flatMap((row, y) =>
-            row.map((cell, x) => {
-              if (cell === 9) {
-                const W = TILE * 1.8, H = TILE * 2.0;
-                return (
-                  <Image
-                    key={`core-${x}-${y}`}
-                    source={{ uri: SPRITE_ASSETS.sapphireCore }}
-                    style={{
-                      position: 'absolute',
-                      left: x * TILE + (TILE - W) / 2,
-                      top: y * TILE + (TILE - H) / 2 - 8,
-                      width: W, height: H,
-                      backgroundColor: 'transparent',
-                      zIndex: 4,
-                    }}
-                    resizeMode="contain"
-                  />
-                );
-              }
-              if (cell === 8) {
-                const W = TILE * 1.8, H = TILE * 1.4;
-                return (
-                  <Image
-                    key={`spike-${x}-${y}`}
-                    source={{ uri: SPRITE_ASSETS.spikePad }}
-                    style={{
-                      position: 'absolute',
-                      left: x * TILE + (TILE - W) / 2,
-                      top: y * TILE + (TILE - H) / 2 + 2,
-                      width: W, height: H,
-                      backgroundColor: 'transparent',
-                      zIndex: 3,
-                    }}
-                    resizeMode="contain"
-                  />
-                );
-              }
-              if (cell === 14 && !brokenBarrels.has(`${x},${y}`)) {
-                const W = TILE * 1.4, H = TILE * 1.8;
-                return (
-                  <Image
-                    key={`barrel-${x}-${y}`}
-                    source={{ uri: SPRITE_ASSETS.barrel }}
-                    style={{
-                      position: 'absolute',
-                      left: x * TILE + (TILE - W) / 2,
-                      top: y * TILE + (TILE - H) / 2 - 6,
-                      width: W, height: H,
-                      backgroundColor: 'transparent',
-                      zIndex: 4,    // below scouts (5) so player & enemies always overlay
-                    }}
-                    resizeMode="contain"
-                  />
-                );
-              }
-              if (cell === 15) {
-                // Procedurally rendered spiral staircase (downward exit).
-                return (
-                  <View
-                    key={`stairs-${x}-${y}`}
-                    style={{
-                      position: 'absolute',
-                      left: x * TILE,
-                      top: y * TILE,
-                      width: TILE,
-                      height: TILE,
-                      zIndex: 3,
-                    }}
-                    pointerEvents="none"
-                  >
-                    <SpiralStaircase tile={TILE} tick={animTick} />
-                  </View>
-                );
-              }
-              return null;
-            })
-          )}
+          {/* Sapphire Core, Spike Pad, Destructible Barrel and Spiral Staircase
+              overlays — memoized so they don't re-mount every movement frame. */}
+          {staticOverlays}
 
           {/* Animated drawbridge at the throne chamber south entrance (9,5).
               Lowers as the player approaches and raises again when they walk away.
