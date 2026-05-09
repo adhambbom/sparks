@@ -401,9 +401,26 @@ export default function GameScreen() {
       return;
     }
     if (tile === 9) {
-      // Sapphire Core - objective completed
+      // Sapphire Core - main objective. ONE-TIME reward only — guards against
+      // the gold-farm exploit where pressing A repeatedly granted +500G each time.
+      const claimed = state?.world?.completedTrials?.includes('sapphire_core');
+      if (claimed) {
+        setHint('★ SAPPHIRE CORE — already secured');
+        setTimeout(() => setHint(''), 1500);
+        return;
+      }
       sfx.victory();
       addGold(500);
+      // Mark the core as claimed so subsequent presses do nothing.
+      if (state) {
+        setState({
+          ...state,
+          world: {
+            ...state.world,
+            completedTrials: [...(state.world.completedTrials || []), 'sapphire_core'],
+          },
+        });
+      }
       setHint('★ SAPPHIRE CORE RECOVERED! +500G');
       setTimeout(() => setHint(''), 3000);
       saveCheckpoint();
@@ -454,16 +471,6 @@ export default function GameScreen() {
   const handleSave = async () => {
     await saveCheckpoint();
     setHint('CHECKPOINT SAVED');
-    setTimeout(() => setHint(''), 1500);
-    setPauseOpen(false);
-  };
-
-  const restAtAcademy = () => {
-    if (!state) return;
-    const next = { ...state };
-    next.player = { ...next.player, hp: next.player.maxHp, mp: next.player.maxMp };
-    setState(next);
-    setHint('FULLY RESTORED');
     setTimeout(() => setHint(''), 1500);
     setPauseOpen(false);
   };
@@ -803,8 +810,6 @@ export default function GameScreen() {
             <PixelButton title="SKILL TREE" onPress={() => { setPauseOpen(false); router.push('/skills'); }} color={COLORS.neonMagenta} full />
             <View style={{ height: 8 }} />
             <PixelButton title="INVENTORY" onPress={() => { setPauseOpen(false); router.push('/inventory'); }} color={COLORS.neonCyan} full />
-            <View style={{ height: 8 }} />
-            <PixelButton title="REST (FULL HEAL)" onPress={restAtAcademy} color={COLORS.neonGreen} full />
             <View style={{ height: 8 }} />
             <PixelButton title="SAVE CHECKPOINT" onPress={handleSave} color={COLORS.neonYellow} full />
             <View style={{ height: 8 }} />
