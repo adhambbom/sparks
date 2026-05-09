@@ -148,29 +148,60 @@ frontend:
       - working: NA
         agent: "main"
         comment: |
-          DIAGONAL BATTLE LAYOUT (so dialog/menu UI never overlaps the sprites):
-          • Stage is now a positioned container (relative).
-          • Enemy is anchored absolute TOP-LEFT — compact nameplate card
-            (cyan border, dark bg) showing name + tier/SPD + HP bar, with the
-            enemy sprite directly below, ground-shadow flush left.
-          • Player ADHAMB is anchored absolute BOTTOM-RIGHT (just above the
-            bottom HUD), facing LEFT toward the enemy on the top-left
-            (removed the scaleX:-1 mirror flip from the previous layout).
-          • Floaters anchor over each respective sprite.
-          • Bottom HUD layout (top→bottom): combat log (top), green-bordered
-            player info panel, 2×2 action grid — all confined to the bottom
-            quarter so words never block the characters.
+          Diagonal corner battle layout (enemy top-left, player bottom-right) and
+          AuthContext fetchMe-after-login fix. See earlier comment for details.
 
-          AUTH FIX (incidental to enable testing):
-          • AuthContext.login & .register now call fetchMe() after the API
-            call to populate the full user profile. Previously they tried to
-            destructure id/email/name/role from the login response which
-            only contains tokens, leaving user state with all-undefined
-            fields and silently breaking the post-login redirect.
-          • Note: Playwright UI verification is blocked because the sandbox
-            cannot reach the public preview URL externally — this is a
-            test-environment limitation, not a real-user issue. Live users
-            on their own browsers will see all the changes immediately.
+  - task: "Real spritesheet ADHAMB walk cycle (B-1 plan)"
+    implemented: true
+    working: NA
+    file: "/app/backend/scripts/process_adhamb_sheet.py, /app/frontend/src/components/SheetSprite.tsx, /app/frontend/app/game.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: |
+          User chose option B-1: use the supplied AI spritesheet temporarily,
+          process it, mirror LEFT→RIGHT, and build a swappable animation system.
+
+          IMPLEMENTATION:
+          1) /app/backend/scripts/process_adhamb_sheet.py
+             • Loads the user's 1024×1536 RGBA sheet (col grid 4, row grid 5)
+             • Slices the visible 9 cells (DOWN/UP/LEFT × 3 frames each)
+             • Skips the duplicate LEFT row & cut-off RIGHT row
+             • Keys black background to alpha (hard 28 / soft 70 thresholds for
+               clean anti-aliased edges) — fixes the user's complaint about black bg
+             • Auto-bbox each cell, computes the largest sprite extent across
+               all 9 frames, then centres each into a uniform 319×319 RGBA canvas
+               so frames swap with ZERO jitter during walking
+             • Generates RIGHT_{0,1,2} by horizontal-mirroring LEFT_{0,1,2}
+             • Saves 12 PNGs to /app/backend/static/sprites/adhamb_sheet/
+
+          2) /app/frontend/src/components/SheetSprite.tsx — swappable animation system
+             • SHEETS registry keyed by sheet id; pattern fn (dir, frame) → URL
+             • WALK_LOOP pattern = [1, 0, 2, 0] (left-step → idle → right-step → idle)
+             • Idle frame snaps to 0 when `moving=false` (animation only plays
+               while moving — per spec)
+             • framesPerStep=3 (tick @ 10fps → ~3.3 fps step rate ≈ Pokémon Emerald)
+             • Image rendering uses `imageRendering: 'pixelated'` on web so the
+               crisp pixel-art edges stay crisp at any size
+             • prefetchSheet() helper — call once on mount to pre-decode all 12
+               frames so the first walk doesn't network-flicker
+             • To swap in a corrected sheet later: just add a new entry in SHEETS
+               and pass `sheet="newId"`; no code changes anywhere else.
+
+          3) /app/frontend/app/game.tsx wiring
+             • Player render now uses <SheetSprite sheet="adhamb" dir={facing}
+               tick={animTick} moving={isMoving} size={TILE * 1.55} ... />
+             • prefetchSheet('adhamb') runs once on mount
+             • facingRef-driven 4-direction movement (dominant axis) was already
+               in place from the previous task — kept untouched
+             • SPEED=6 px/frame already gave responsive Pokémon-style pacing
+
+          Bundle compiles clean (897 modules). 12 sprite PNGs serve via
+          /api/static/sprites/adhamb_sheet/{up,down,left,right}_{0,1,2}.png.
+          User can verify in their live session.
 
   - task: "Speed-up + sprite leg fix + map darken"
     implemented: true

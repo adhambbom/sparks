@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
 import ConcreteFloor from '../src/components/ConcreteFloor';
-import PokeAdhamb from '../src/components/PokeAdhamb';
+import SheetSprite, { prefetchSheet } from '../src/components/SheetSprite';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -144,6 +144,11 @@ export default function GameScreen() {
   useEffect(() => {
     const id = setInterval(() => setAnimTick((t) => (t + 1) % 1024), 100);
     return () => clearInterval(id);
+  }, []);
+
+  // Prefetch every ADHAMB sheet frame on mount so the first walk doesn't flicker.
+  useEffect(() => {
+    prefetchSheet('adhamb');
   }, []);
 
   useFocusEffect(
@@ -697,33 +702,40 @@ export default function GameScreen() {
               </View>
             );
           })}
-          {/* Player sprite — Pokemon-GBA-style procedural ADHAMB chibi.
-              Drawn with `react-native-svg` so we can show 4 facing directions
-              (up/down/left/right) and 2 walking frames cheaply. Smaller than the
-              old hi-res PNG to match Pokemon-Emerald proportions (~1×1.4 tiles). */}
+          {/* Player sprite — real spritesheet via <SheetSprite>.
+              Walk loop = [left-step, idle, right-step, idle] driven by `animTick`.
+              Animation only plays while moving; idle frame snaps when joystick released.
+              Frames are pre-cropped, equal-size, transparent — see
+              /app/backend/scripts/process_adhamb_sheet.py.
+              Swap the active sheet later by adding a key in SHEETS and passing it. */}
           {(() => {
-            const W = TILE * 0.95;
-            const H = TILE * 1.30;
+            // SheetSprite frames are square (319×319). Render slightly larger than
+            // a tile so the chibi reads clearly while still feeling Pokémon-Emerald
+            // proportioned (~1×1 tile + a smidge of headroom).
+            const SIZE = TILE * 1.55;
             const isMoving = dirRef.current.x !== 0 || dirRef.current.y !== 0;
-            // Walking frame — alternate every 2 ticks (~5 fps step rate) while moving.
-            const walkFrame: 0 | 1 = isMoving
-              ? (((Math.floor(animTick / 2) % 2) === 0) ? 0 : 1)
-              : 0;
-            const facing = facingRef.current;
             return (
               <View
                 style={{
                   position: 'absolute',
-                  left: posRef.current.px - W / 2,
-                  top: posRef.current.py - H * 0.78,
-                  width: W,
-                  height: H,
+                  // Centre on the feet anchor: half size left, ~75% size up.
+                  left: posRef.current.px - SIZE / 2,
+                  top: posRef.current.py - SIZE * 0.78,
+                  width: SIZE,
+                  height: SIZE,
                   zIndex: 9999,
                   ...(Platform.OS === 'android' ? { elevation: 30 } : {}),
                 }}
                 pointerEvents="none"
               >
-                <PokeAdhamb dir={facing} frame={walkFrame} width={W} height={H} />
+                <SheetSprite
+                  sheet="adhamb"
+                  dir={facingRef.current}
+                  tick={animTick}
+                  moving={isMoving}
+                  size={SIZE}
+                  framesPerStep={3}
+                />
               </View>
             );
           })()}
