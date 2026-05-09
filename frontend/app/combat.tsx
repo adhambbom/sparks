@@ -77,7 +77,7 @@ export default function CombatScreen() {
   useEffect(() => {
     if (isBoss) sfx.bossPhase(); else sfx.encounter();
     if (player.spd < enemyData.spd) {
-      setTimeout(() => enemyTurn(), 350);
+      setTimeout(() => enemyTurn(), 220);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -135,7 +135,7 @@ export default function CombatScreen() {
     showFloater(`-${dmg}`, COLORS.neonYellow, 'e');
     shakeAnim(enemyShake);
     pushLog(`${player.name} strikes for ${dmg}!`);
-    setTimeout(() => endPlayerTurn(), 350);
+    setTimeout(() => endPlayerTurn(), 220);
   };
 
   const playerSkill = (id: string) => {
@@ -175,7 +175,7 @@ export default function CombatScreen() {
       }
     }
     setPanel('main');
-    setTimeout(() => endPlayerTurn(), 400);
+    setTimeout(() => endPlayerTurn(), 260);
   };
 
   const playerItem = (itemId: string) => {
@@ -195,7 +195,7 @@ export default function CombatScreen() {
     }
     removeItem(itemId, 1);
     setPanel('main');
-    setTimeout(() => endPlayerTurn(), 300);
+    setTimeout(() => endPlayerTurn(), 200);
   };
 
   const playerRun = () => {
@@ -214,12 +214,12 @@ export default function CombatScreen() {
     if (succeed) {
       sfx.confirm();
       pushLog('Got away safely.');
-      setTimeout(() => router.back(), 350);
+      setTimeout(() => router.back(), 220);
     } else {
       setBusy(true);
       sfx.cancel();
       pushLog('Failed to escape!');
-      setTimeout(() => endPlayerTurn(), 350);
+      setTimeout(() => endPlayerTurn(), 220);
     }
   };
 
@@ -243,7 +243,7 @@ export default function CombatScreen() {
         return;
       }
       enemyTurn();
-    }, 100);
+    }, 60);
   };
 
   const enemyTurn = () => {
@@ -278,8 +278,8 @@ export default function CombatScreen() {
         }
         setBusy(false);
         setTurn('player');
-      }, 300);
-    }, 350);
+      }, 200);
+    }, 220);
   };
 
   // ----- end states -----
@@ -306,14 +306,14 @@ export default function CombatScreen() {
       } else {
         router.back();
       }
-    }, 750);
+    }, 500);
   };
 
   const onDefeat = async () => {
     setTurn('end');
     sfx.defeat();
     pushLog('You collapsed...');
-    setTimeout(() => router.replace('/gameover'), 600);
+    setTimeout(() => router.replace('/gameover'), 400);
   };
 
   // ----- render -----

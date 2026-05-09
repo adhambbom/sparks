@@ -20,9 +20,9 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { sfx } from '../src/utils/audio';
 
 const TILE = 38;
-const SPEED = 6; // pixels per frame (1.5× boost from 4 for snappier movement)
+const SPEED = 9; // pixels per frame (was 6 → +50% snappier overworld walking)
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
-const ROAM_TICK_MS = 1000; // every 1 second (was 2s — 2× faster patrol cycle)
+const ROAM_TICK_MS = 800; // every 0.8s — slightly faster patrol cycle
 const MAX_ROAMERS = 3;
 const CHASE_RADIUS = 4;
 

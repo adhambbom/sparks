@@ -30,7 +30,7 @@ export default function RootLayout() {
               headerShown: false,
               contentStyle: { backgroundColor: '#0a0a14' },
               animation: 'fade',
-              animationDuration: 200,   // 0.2s — keeps overworld→combat snappy (≤0.3s)
+              animationDuration: 120,   // 0.12s — near-instant overworld→combat fade
             }}
           />
         </GameProvider>
