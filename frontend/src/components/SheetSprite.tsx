@@ -32,10 +32,15 @@ type SheetDef = {
   pattern: (dir: Direction, frame: 0 | 1 | 2) => string;
 };
 
+/* Cache-buster suffix bumped whenever the underlying PNGs are re-processed.
+ * Forces browsers to re-fetch instead of serving stale cached frames. */
+const ADHAMB_VER = 'v2';
+
 export const SHEETS: Record<string, SheetDef> = {
   /** ADHAMB — current player. Swap this entry to retire the temp sheet. */
   adhamb: {
-    pattern: (dir, f) => `${BACKEND}/api/static/sprites/adhamb_sheet/${dir}_${f}.png`,
+    pattern: (dir, f) =>
+      `${BACKEND}/api/static/sprites/adhamb_sheet/${dir}_${f}.png?${ADHAMB_VER}`,
   },
 };
 

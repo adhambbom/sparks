@@ -37,13 +37,25 @@ ROWS = 5              # DOWN, UP, LEFT, (dup), RIGHT(cut)
 CELL_W = SHEET_W // COLS    # 256
 CELL_H = SHEET_H // ROWS    # 307
 
-# Map "logical row index" → row in the sheet
-ROW_INDEX = {"down": 0, "up": 1, "left": 2}     # 'right' will be mirrored from 'left'
+# Map "logical row index" → row in the sheet.
+# NOTE: the user-supplied source row labelled "LEFT" actually shows the character
+# facing RIGHT (sheet labelling bug). We treat it as the canonical RIGHT-facing
+# frames and generate LEFT by horizontal mirroring below.
+ROW_INDEX = {"down": 0, "up": 1, "right": 2}     # 'left' is mirrored from 'right'
 
 
 def cell_bbox(col: int, row: int) -> tuple[int, int, int, int]:
-    """Return the pixel bbox of cell (col,row), 0-indexed."""
-    return (col * CELL_W, row * CELL_H, (col + 1) * CELL_W, (row + 1) * CELL_H)
+    """Return the pixel bbox of cell (col,row), 0-indexed.
+    Inset by `INSET` px on every side so the dashed cyan grid lines that ride
+    along the cell boundaries are NOT captured during cropping (they were
+    showing up as a faint dotted box around the sprite previously)."""
+    INSET = 14
+    return (
+        col * CELL_W + INSET,
+        row * CELL_H + INSET,
+        (col + 1) * CELL_W - INSET,
+        (row + 1) * CELL_H - INSET,
+    )
 
 
 def crop_cell(im: Image.Image, col: int, row: int) -> Image.Image:
@@ -56,10 +68,15 @@ def key_black(rgba: Image.Image, hard: int = 28, soft: int = 70) -> Image.Image:
     Pixels darker than `hard` (per channel) become fully transparent.
     Pixels with brightness between `hard` and `soft` get partial alpha so the
     silhouette stays anti-aliased rather than jaggy.
+
+    Also kills any leftover **dashed cyan grid pixels** (the ones that ride the
+    cell borders in the source sheet) — these are saturated teal/cyan with very
+    low red, so we detect them by `b > 90 and r < 80` and zero their alpha.
     """
     a = np.array(rgba.convert("RGBA")).astype(np.int32)
     r, g, b, _ = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
     bright = np.maximum(np.maximum(r, g), b)
+    # Black keyout
     new_alpha = np.where(
         bright <= hard,
         0,
@@ -68,8 +85,12 @@ def key_black(rgba: Image.Image, hard: int = 28, soft: int = 70) -> Image.Image:
             255,
             ((bright - hard) * 255 // max(soft - hard, 1)).clip(0, 255),
         ),
-    ).astype(np.uint8)
-    a[..., 3] = new_alpha
+    ).astype(np.int32)
+    # Cyan-grid keyout — kills dashed border remnants without touching the
+    # character's cyan visor (visor has higher red and is smaller/contained).
+    cyan_mask = (b > 90) & (r < 80) & (g > 90)
+    new_alpha = np.where(cyan_mask, 0, new_alpha)
+    a[..., 3] = new_alpha.astype(np.uint8)
     return Image.fromarray(a.astype(np.uint8), mode="RGBA")
 
 
@@ -137,9 +158,10 @@ def process() -> None:
         k: fit_into(v, target) for k, v in raw.items()
     }
 
-    # 4. Build RIGHT by mirroring LEFT horizontally.
+    # 4. Build LEFT by mirroring RIGHT horizontally (the source row labelled
+    #    'LEFT' was actually facing right — see ROW_INDEX comment).
     for f in (0, 1, 2):
-        centred[("right", f)] = centred[("left", f)].transpose(Image.FLIP_LEFT_RIGHT)
+        centred[("left", f)] = centred[("right", f)].transpose(Image.FLIP_LEFT_RIGHT)
 
     # 5. Save all 12 frames.
     for (d, f), im in centred.items():
