@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
 import ConcreteFloor from '../src/components/ConcreteFloor';
+import PokeAdhamb from '../src/components/PokeAdhamb';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -121,6 +122,9 @@ export default function GameScreen() {
   const [pauseOpen, setPauseOpen] = useState(false);
   const [hint, setHint] = useState('');
   const dirRef = useRef({ x: 0, y: 0 });
+  // Last *non-zero* movement direction the player faced. Used to pick which
+  // PokeAdhamb side-sprite (up/down/left/right) to render even when standing still.
+  const facingRef = useRef<'up' | 'down' | 'left' | 'right'>('down');
   const lastTileRef = useRef({ x: 0, y: 0 });
   // pixel position; tile = floor(p/TILE)
   const posRef = useRef({ px: 0, py: 0 });
@@ -659,8 +663,9 @@ export default function GameScreen() {
           {roamers.map((r) => {
             const isBoss = r.boss;
             const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
-            const W = isBoss ? TILE * 1.7 : TILE * 1.4;
-            const H = isBoss ? TILE * 1.7 : TILE * 1.4;
+            // Pokemon-Emerald-style scale: enemies are ~1 tile (scout) / ~1.3 tile (boss).
+            const W = isBoss ? TILE * 1.30 : TILE * 1.05;
+            const H = isBoss ? TILE * 1.30 : TILE * 1.05;
             // Per-roamer phase based on uid + animTick → asynchronous gait
             const uidHash = r.uid.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
             const tickPhase = animTick + uidHash;
@@ -692,38 +697,33 @@ export default function GameScreen() {
               </View>
             );
           })}
-          {/* Player sprite — mini-ADHAMB, ALWAYS on top (zIndex 9999).
-              FULL sprite rendered with subtle bob/sway while moving — the AI-painted PNG
-              already contains the legs/boots, no procedural-leg overlay required. */}
+          {/* Player sprite — Pokemon-GBA-style procedural ADHAMB chibi.
+              Drawn with `react-native-svg` so we can show 4 facing directions
+              (up/down/left/right) and 2 walking frames cheaply. Smaller than the
+              old hi-res PNG to match Pokemon-Emerald proportions (~1×1.4 tiles). */}
           {(() => {
-            const W = TILE * 1.7;
-            const H = TILE * 2.4;
+            const W = TILE * 0.95;
+            const H = TILE * 1.30;
             const isMoving = dirRef.current.x !== 0 || dirRef.current.y !== 0;
-            const phase = animTick * 0.9;
-            const bob = isMoving ? Math.abs(Math.sin(phase)) * 3 : 0;
-            const sway = isMoving ? Math.sin(phase * 0.5) * 2 : 0;
+            // Walking frame — alternate every 2 ticks (~5 fps step rate) while moving.
+            const walkFrame: 0 | 1 = isMoving
+              ? (((Math.floor(animTick / 2) % 2) === 0) ? 0 : 1)
+              : 0;
+            const facing = facingRef.current;
             return (
               <View
                 style={{
                   position: 'absolute',
                   left: posRef.current.px - W / 2,
-                  top: posRef.current.py - H * 0.7,
+                  top: posRef.current.py - H * 0.78,
                   width: W,
                   height: H,
                   zIndex: 9999,
-                  transform: [
-                    { translateY: -bob },
-                    { rotate: `${sway}deg` },
-                  ],
                   ...(Platform.OS === 'android' ? { elevation: 30 } : {}),
                 }}
                 pointerEvents="none"
               >
-                <Image
-                  source={{ uri: SPRITE_ASSETS.player }}
-                  style={{ width: W, height: H, backgroundColor: 'transparent' }}
-                  resizeMode="contain"
-                />
+                <PokeAdhamb dir={facing} frame={walkFrame} width={W} height={H} />
               </View>
             );
           })()}
@@ -800,7 +800,15 @@ export default function GameScreen() {
 
       {/* Controls */}
       <VirtualJoystick
-        onMove={(dx, dy) => { dirRef.current = { x: dx, y: dy }; }}
+        onMove={(dx, dy) => {
+          dirRef.current = { x: dx, y: dy };
+          // Update facing based on the dominant axis (Pokemon-style: 4-way only).
+          if (Math.abs(dx) > Math.abs(dy)) {
+            facingRef.current = dx < 0 ? 'left' : 'right';
+          } else if (dy !== 0) {
+            facingRef.current = dy < 0 ? 'up' : 'down';
+          }
+        }}
         onEnd={() => { dirRef.current = { x: 0, y: 0 }; }}
       />
       <ActionButton label="A" position="A" color={COLORS.neonGreen} onPress={onActionA} testID="btn-a" />
