@@ -20,7 +20,7 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { sfx } from '../src/utils/audio';
 
 const TILE = 38;
-const SPEED = 9; // pixels per frame (was 6 → +50% snappier overworld walking)
+const SPEED = 12; // pixels per frame (was 9 → another +33% on the overworld walk)
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
 const ROAM_TICK_MS = 800; // every 0.8s — slightly faster patrol cycle
 const MAX_ROAMERS = 3;
@@ -897,13 +897,28 @@ export default function GameScreen() {
       {/* Controls */}
       <VirtualJoystick
         onMove={(dx, dy) => {
-          dirRef.current = { x: dx, y: dy };
-          // Update facing based on the dominant axis (Pokemon-style: 4-way only).
-          if (Math.abs(dx) > Math.abs(dy)) {
+          // Pokémon-style 4-way movement at FULL SPEED regardless of how far
+          // the user pushes the knob. The joystick reports normalised -1..1
+          // values, so a half-push previously gave half-speed walking — that's
+          // why traversal felt sluggish. We snap to the dominant axis ±1 with
+          // a small dead-zone so accidental tilts don't trigger movement.
+          const adx = Math.abs(dx);
+          const ady = Math.abs(dy);
+          const mag = Math.max(adx, ady);
+          if (mag < 0.18) {
+            dirRef.current = { x: 0, y: 0 };
+            return;
+          }
+          let snapX = 0;
+          let snapY = 0;
+          if (adx > ady) {
+            snapX = dx < 0 ? -1 : 1;
             facingRef.current = dx < 0 ? 'left' : 'right';
-          } else if (dy !== 0) {
+          } else {
+            snapY = dy < 0 ? -1 : 1;
             facingRef.current = dy < 0 ? 'up' : 'down';
           }
+          dirRef.current = { x: snapX, y: snapY };
         }}
         onEnd={() => { dirRef.current = { x: 0, y: 0 }; }}
       />
