@@ -518,8 +518,8 @@ export function xpForNextLevel(level: number): number {
 export const ACADEMY_MAP: number[][] = [
   // Row 0  — north outer wall
   [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12],
-  // Row 1  — upper hall (behind throne chamber)
-  [12, 0, 0, 0, 0, 0, 0,12,12,12,12,12, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 1  — upper hall (behind throne chamber); spiral staircase at (4,1) leads down
+  [12, 0, 0, 0,15, 0, 0,12,12,12,12,12, 0, 0, 0, 0, 0, 0, 0,12],
   // Row 2  — throne chamber rear (banners flanking core)
   [12, 0, 0, 0, 0, 0, 0,12,13, 0,13,12, 0, 0, 0, 0, 0, 0, 0,12],
   // Row 3  — THRONE CHAMBER with Sapphire Core at center (9,3)

@@ -130,4 +130,18 @@ export const sfx = {
     setTimeout(() => tone(1320, 80, 'sine', 0.08), 70);
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   },
+  /** Short metallic clack for each grid step the player takes on stone floor. */
+  footstep() {
+    // Two quick stacked tones simulate boot-on-stone — kept low volume so the
+    // walk loop doesn't get fatiguing during long traversal.
+    tone(180 + Math.random() * 40, 35, 'square', 0.025);
+    tone(90 + Math.random() * 20, 25, 'sawtooth', 0.018);
+    if (Platform.OS !== 'web') Haptics.selectionAsync().catch(() => {});
+  },
+  /** Heavy chain-drop / wood-thud as the throne drawbridge lowers. */
+  drawbridge() {
+    sweep(220, 70, 380, 'sawtooth', 0.09);
+    setTimeout(() => tone(50, 220, 'square', 0.08), 200);
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+  },
 };

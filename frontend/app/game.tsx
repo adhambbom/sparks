@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
 import ConcreteFloor from '../src/components/ConcreteFloor';
+import Drawbridge from '../src/components/Drawbridge';
+import SpiralStaircase from '../src/components/SpiralStaircase';
 import SheetSprite, { prefetchSheet } from '../src/components/SheetSprite';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
@@ -126,6 +128,9 @@ export default function GameScreen() {
   // PokeAdhamb side-sprite (up/down/left/right) to render even when standing still.
   const facingRef = useRef<'up' | 'down' | 'left' | 'right'>('down');
   const lastTileRef = useRef({ x: 0, y: 0 });
+  // True once the throne drawbridge has fired its lowering thud SFX. Reset when
+  // the player walks far enough away so the SFX retriggers on the next approach.
+  const bridgeThudFiredRef = useRef(false);
   // pixel position; tile = floor(p/TILE)
   const posRef = useRef({ px: 0, py: 0 });
   const [renderTick, setRenderTick] = useState(0);
@@ -361,8 +366,11 @@ export default function GameScreen() {
 
   const onTileChange = (tx: number, ty: number) => {
     setPosition(tx, ty);
-    // Tile types
+    // Footstep SFX — fires once per grid tile entered while moving on walkable
+    // floor (type 0), so the cadence stays in sync with the actual movement
+    // rather than the animation tick (no foot-noise while standing still).
     const tile = ACADEMY_MAP[ty][tx];
+    if (tile === 0) sfx.footstep();
     if (tile === 5) setHint('STORE — Press A');
     else if (tile === 6) setHint('SKILL CHAMBER — Press A');
     else if (tile === 4) setHint('LAUNCH PAD — Press A');
@@ -370,6 +378,7 @@ export default function GameScreen() {
     else if (tile === 7) setHint('FINAL TRIAL — Press A · ⚠ BOSS');
     else if (tile === 9) setHint('★ SAPPHIRE CORE — Press A');
     else if (tile === 10) setHint('POWER CONSOLE — Press A');
+    else if (tile === 15) setHint('▼ SPIRAL STAIRCASE — Press A · DESCEND');
     else if (tile === 8) {
       // Spike pad damage trigger
       sfx.damage();
@@ -469,6 +478,14 @@ export default function GameScreen() {
       setHint('CONSOLE ACTIVATED · +40 HP');
       setTimeout(() => setHint(''), 2000);
       saveCheckpoint();
+      return;
+    }
+    if (tile === 15) {
+      // Spiral staircase — leads to the next dungeon level. Sealed for now
+      // (level 2 not implemented yet); show flavour hint and play a soft thud.
+      sfx.cancel();
+      setHint('▼ STAIRS — Sealed by the Glitch. Return after the boss.');
+      setTimeout(() => setHint(''), 2200);
       return;
     }
     // Find nearby NPC (within 1 tile)
@@ -626,9 +643,65 @@ export default function GameScreen() {
                   />
                 );
               }
+              if (cell === 15) {
+                // Procedurally rendered spiral staircase (downward exit).
+                return (
+                  <View
+                    key={`stairs-${x}-${y}`}
+                    style={{
+                      position: 'absolute',
+                      left: x * TILE,
+                      top: y * TILE,
+                      width: TILE,
+                      height: TILE,
+                      zIndex: 3,
+                    }}
+                    pointerEvents="none"
+                  >
+                    <SpiralStaircase tile={TILE} tick={animTick} />
+                  </View>
+                );
+              }
               return null;
             })
           )}
+
+          {/* Animated drawbridge at the throne chamber south entrance (9,5).
+              Lowers as the player approaches and raises again when they walk away.
+              Plays a heavy thud SFX when it crosses the lowered threshold. */}
+          {(() => {
+            const BRIDGE_X = 9;
+            const BRIDGE_Y = 5;
+            // Distance from player tile to the bridge tile (Chebyshev so the
+            // animation feels "near" along corridors as well as diagonals).
+            const px = Math.round(posRef.current.px / TILE);
+            const py = Math.round(posRef.current.py / TILE);
+            const dist = Math.max(Math.abs(px - BRIDGE_X), Math.abs(py - BRIDGE_Y));
+            // 0 tiles → fully lowered (1.0), 4+ tiles → fully raised (0.0).
+            const proximity = Math.max(0, Math.min(1, (4 - dist) / 4));
+            // Trigger thud SFX once when the bridge transitions from raised→lowered.
+            if (proximity > 0.95 && !bridgeThudFiredRef.current) {
+              bridgeThudFiredRef.current = true;
+              sfx.drawbridge();
+            } else if (proximity < 0.3) {
+              bridgeThudFiredRef.current = false;
+            }
+            return (
+              <View
+                style={{
+                  position: 'absolute',
+                  left: BRIDGE_X * TILE,
+                  top: BRIDGE_Y * TILE,
+                  width: TILE,
+                  height: TILE,
+                  zIndex: 2,
+                }}
+                pointerEvents="none"
+              >
+                <Drawbridge tile={TILE} proximity={proximity} />
+              </View>
+            );
+          })()}
           {/* NPCs — actual sprite + clean centered nameplate */}
           {Object.entries(NPCS).map(([id, npc]) => {
             const npcSprite =
