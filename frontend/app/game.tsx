@@ -513,35 +513,38 @@ export default function GameScreen() {
     }
     // Find nearby NPC (within 1 tile)
     const npc = Object.values(NPCS).find(n => Math.abs(n.x - x) <= 1 && Math.abs(n.y - y) <= 1);
-    if (npc) setDialog({ name: npc.name, lines: npc.lines, line: 0 });
-  };
+    if (npc) {
+      setDialog({ name: npc.name, lines: npc.lines, line: 0 });
+      return;
+    }
 
-  const onActionB = () => {
-    sfx.click();
-    const { x, y } = lastTileRef.current;
-    // Look for an adjacent barrel (4-directional) to smash
-    const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-    for (const [dx, dy] of dirs) {
+    // Smash an adjacent barrel (4-directional) for a small gold drop.
+    // Moved here from the old B button so A is the single "interact / hit"
+    // button — B is now reserved exclusively for the pause menu.
+    const smashDirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    for (const [dx, dy] of smashDirs) {
       const bx = x + dx;
       const by = y + dy;
       if (by < 0 || by >= ACADEMY_MAP.length || bx < 0 || bx >= ACADEMY_MAP[0].length) continue;
       if (ACADEMY_MAP[by][bx] !== 14) continue;
       const key = `${bx},${by}`;
       if (brokenBarrelsRef.current.has(key)) continue;
-      // Smash it
       const next = new Set(brokenBarrelsRef.current);
       next.add(key);
       brokenBarrelsRef.current = next;
       setBrokenBarrels(next);
       sfx.damage();
-      // Reward: small chance of gold
       const goldDrop = Math.floor(Math.random() * 15) + 5;
       addGold(goldDrop);
       setHint(`▒ BARREL SMASHED · +${goldDrop}G`);
       setTimeout(() => setHint(''), 1500);
       return;
     }
-    // No barrel adjacent → open pause menu (legacy behavior)
+  };
+
+  // B button is now ONLY the pause menu — never doubles as an action button.
+  const onActionB = () => {
+    sfx.click();
     setPauseOpen(true);
   };
 
