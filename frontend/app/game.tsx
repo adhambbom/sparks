@@ -850,50 +850,33 @@ export default function GameScreen() {
         </View>
 
         {/* Cinematic vignette — soft edge darkening over the viewport so the
-            scene has depth and the player's tile area pops. Pure RN <View>s
-            with linear gradients (no SVG perf cost), sitting above the world
-            but below the HUD. pointerEvents=none so it never blocks input. */}
+            scene has depth without ever obscuring the characters at the centre.
+            Opacities pulled WAY down from the previous pass (was 0.45/0.22/0.10
+            top + 0.18 sides → players reported the cast looked almost invisible). */}
         <View
           style={{
             position: 'absolute',
-            top: 0, left: 0, right: 0, height: 60,
+            top: 0, left: 0, right: 0, height: 32,
           }}
           pointerEvents="none"
         >
-          {/* Fake top vignette via 3 stacked translucent strips */}
-          <View style={{ height: 28, backgroundColor: 'rgba(0,0,0,0.45)' }} />
-          <View style={{ height: 18, backgroundColor: 'rgba(0,0,0,0.22)' }} />
-          <View style={{ height: 14, backgroundColor: 'rgba(0,0,0,0.10)' }} />
+          <View style={{ height: 12, backgroundColor: 'rgba(0,0,0,0.18)' }} />
+          <View style={{ height: 10, backgroundColor: 'rgba(0,0,0,0.09)' }} />
+          <View style={{ height: 10, backgroundColor: 'rgba(0,0,0,0.04)' }} />
         </View>
         <View
           style={{
             position: 'absolute',
-            bottom: 0, left: 0, right: 0, height: 60,
+            bottom: 0, left: 0, right: 0, height: 32,
           }}
           pointerEvents="none"
         >
-          <View style={{ height: 14, backgroundColor: 'rgba(0,0,0,0.10)' }} />
-          <View style={{ height: 18, backgroundColor: 'rgba(0,0,0,0.22)' }} />
-          <View style={{ height: 28, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+          <View style={{ height: 10, backgroundColor: 'rgba(0,0,0,0.04)' }} />
+          <View style={{ height: 10, backgroundColor: 'rgba(0,0,0,0.09)' }} />
+          <View style={{ height: 12, backgroundColor: 'rgba(0,0,0,0.18)' }} />
         </View>
-        <View
-          style={{
-            position: 'absolute',
-            top: 0, bottom: 0, left: 0, width: 36,
-          }}
-          pointerEvents="none"
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.18)' }} />
-        </View>
-        <View
-          style={{
-            position: 'absolute',
-            top: 0, bottom: 0, right: 0, width: 36,
-          }}
-          pointerEvents="none"
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.18)' }} />
-        </View>
+        {/* Side bars stripped entirely — they were the worst offender for
+            washing out the character and roaming enemies. */}
       </View>
 
       {/* Top HUD - status row + action shortcuts row */}
