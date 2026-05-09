@@ -432,12 +432,14 @@ STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 app.mount("/api/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# CORS - allow frontend origin and mobile (no origin)
+# CORS - allow frontend origin (env), mobile (no origin), local dev, and BOTH
+# the Emergent preview domain *and* the production *.emergent.host domain so
+# the same regex covers sandbox and prod deployments without redeployment.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_URL, "http://localhost:3000", "http://localhost:8081"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_origin_regex=r"https://.*\.preview\.emergentagent\.com",
+    allow_origin_regex=r"https://.*\.(preview\.emergentagent\.com|emergent\.host)",
 )
