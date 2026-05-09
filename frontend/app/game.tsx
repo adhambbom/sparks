@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
 import ConcreteFloor from '../src/components/ConcreteFloor';
-import WalkingLegs from '../src/components/WalkingLegs';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
@@ -18,9 +17,9 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { sfx } from '../src/utils/audio';
 
 const TILE = 38;
-const SPEED = 4; // pixels per frame
+const SPEED = 6; // pixels per frame (1.5× boost from 4 for snappier movement)
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
-const ROAM_TICK_MS = 2000; // every 2 seconds (per spec)
+const ROAM_TICK_MS = 1000; // every 1 second (was 2s — 2× faster patrol cycle)
 const MAX_ROAMERS = 3;
 const CHASE_RADIUS = 4;
 
@@ -630,8 +629,9 @@ export default function GameScreen() {
               </View>
             );
           })}
-          {/* Roaming enemies — Clockwork Scouts (4-legged scuttle) and Juggernaut mini-boss.
-              Each enemy has a procedurally-animated leg overlay that visibly steps. */}
+          {/* Roaming enemies — Clockwork Scouts and Juggernaut mini-boss.
+              FULL sprite is rendered (no clip + procedural-leg overlay). The AI sprite
+              already includes legs. We add a subtle bob/sway transform for life. */}
           {roamers.map((r) => {
             const isBoss = r.boss;
             const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
@@ -642,13 +642,7 @@ export default function GameScreen() {
             const tickPhase = animTick + uidHash;
             const swingPhase = tickPhase * 0.6;
             const bob = Math.abs(Math.sin(swingPhase)) * (isBoss ? 1.5 : 2);
-            const sway = Math.sin(swingPhase * 0.5) * (isBoss ? 2 : 4);
-            // Roamers are always "moving" — alternate frames every 200ms (juggernaut: 300ms)
-            const stepDivider = isBoss ? 3 : 2;
-            const legFrame: 0 | 1 | 2 = ((Math.floor(tickPhase / stepDivider) % 2) === 0 ? 1 : 2);
-            // Body sprite occupies top 65% of container; legs fill the bottom 35%
-            const bodyH = H * 0.65;
-            const legsH = H * 0.40;     // slight overlap with body to hide seam
+            const sway = Math.sin(swingPhase * 0.5) * (isBoss ? 1.5 : 3);
             return (
               <View
                 key={r.uid}
@@ -666,28 +660,17 @@ export default function GameScreen() {
                 }}
                 pointerEvents="none"
               >
-                {/* Body sprite — clipped to top 65% so original static legs are hidden */}
-                <View style={{ width: W, height: bodyH, overflow: 'hidden' }}>
-                  <Image
-                    source={{ uri: spriteUri }}
-                    style={{ width: W, height: H, backgroundColor: 'transparent' }}
-                    resizeMode="contain"
-                  />
-                </View>
-                {/* Animated legs overlay */}
-                <View style={{ position: 'absolute', left: 0, top: bodyH - legsH * 0.15, width: W, height: legsH }}>
-                  <WalkingLegs
-                    width={W}
-                    height={legsH}
-                    frame={legFrame}
-                    style={isBoss ? 'juggernaut' : 'scout'}
-                  />
-                </View>
+                <Image
+                  source={{ uri: spriteUri }}
+                  style={{ width: W, height: H, backgroundColor: 'transparent' }}
+                  resizeMode="contain"
+                />
               </View>
             );
           })}
           {/* Player sprite — mini-ADHAMB, ALWAYS on top (zIndex 9999).
-              Body + animated legs combined; legs alternate frames only while moving. */}
+              FULL sprite rendered with subtle bob/sway while moving — the AI-painted PNG
+              already contains the legs/boots, no procedural-leg overlay required. */}
           {(() => {
             const W = TILE * 1.7;
             const H = TILE * 2.4;
@@ -695,13 +678,6 @@ export default function GameScreen() {
             const phase = animTick * 0.9;
             const bob = isMoving ? Math.abs(Math.sin(phase)) * 3 : 0;
             const sway = isMoving ? Math.sin(phase * 0.5) * 2 : 0;
-            // Idle = frame 0 (both legs together); moving = alternate 1 ↔ 2 every 200ms
-            const legFrame: 0 | 1 | 2 = isMoving
-              ? ((Math.floor(animTick / 2) % 2) === 0 ? 1 : 2)
-              : 0;
-            // Body fills top ~70%; legs fill bottom 35% (overlap by 5%)
-            const bodyH = H * 0.70;
-            const legsH = H * 0.35;
             return (
               <View
                 style={{
@@ -719,23 +695,11 @@ export default function GameScreen() {
                 }}
                 pointerEvents="none"
               >
-                {/* Body — clip bottom 30% so static sprite-legs are hidden */}
-                <View style={{ width: W, height: bodyH, overflow: 'hidden' }}>
-                  <Image
-                    source={{ uri: SPRITE_ASSETS.player }}
-                    style={{ width: W, height: H, backgroundColor: 'transparent' }}
-                    resizeMode="contain"
-                  />
-                </View>
-                {/* Animated legs */}
-                <View style={{ position: 'absolute', left: 0, top: bodyH - legsH * 0.15, width: W, height: legsH }}>
-                  <WalkingLegs
-                    width={W}
-                    height={legsH}
-                    frame={legFrame}
-                    style="human"
-                  />
-                </View>
+                <Image
+                  source={{ uri: SPRITE_ASSETS.player }}
+                  style={{ width: W, height: H, backgroundColor: 'transparent' }}
+                  resizeMode="contain"
+                />
               </View>
             );
           })()}

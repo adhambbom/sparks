@@ -6,7 +6,6 @@ import { COLORS, ENEMIES, ABILITIES, ITEMS, Element, SPRITE_ASSETS } from '../sr
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
-import WalkingLegs from '../src/components/WalkingLegs';
 import Floater from '../src/components/Floater';
 import { useGame } from '../src/contexts/GameContext';
 import { sfx } from '../src/utils/audio';
@@ -103,7 +102,7 @@ export default function CombatScreen() {
   useEffect(() => {
     if (enemyData?.isBoss) sfx.bossPhase(); else sfx.encounter();
     if (player.spd < enemyData.spd) {
-      setTimeout(() => enemyTurn(), 700);
+      setTimeout(() => enemyTurn(), 350);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -119,7 +118,7 @@ export default function CombatScreen() {
       if (enemyData.phaseAbilities) setEnemyAbilities(enemyData.phaseAbilities);
       pushLog(`⚠ ${enemyData.name} ENRAGES! ATK +50%`);
       if (enemyData.phaseQuote) pushLog(`"${enemyData.phaseQuote}"`);
-      setTimeout(() => setPhaseFlash(false), 1500);
+      setTimeout(() => setPhaseFlash(false), 750);
     }
   }, [enemyHp, enemyData, phaseChanged]);
 
@@ -161,7 +160,7 @@ export default function CombatScreen() {
     showFloater(`-${dmg}`, COLORS.neonYellow, 'e');
     shakeAnim(enemyShake);
     pushLog(`${player.name} strikes for ${dmg}!`);
-    setTimeout(() => endPlayerTurn(), 700);
+    setTimeout(() => endPlayerTurn(), 350);
   };
 
   const playerSkill = (id: string) => {
@@ -201,7 +200,7 @@ export default function CombatScreen() {
       }
     }
     setPanel('main');
-    setTimeout(() => endPlayerTurn(), 800);
+    setTimeout(() => endPlayerTurn(), 400);
   };
 
   const playerItem = (itemId: string) => {
@@ -221,7 +220,7 @@ export default function CombatScreen() {
     }
     removeItem(itemId, 1);
     setPanel('main');
-    setTimeout(() => endPlayerTurn(), 600);
+    setTimeout(() => endPlayerTurn(), 300);
   };
 
   const playerRun = () => {
@@ -240,12 +239,12 @@ export default function CombatScreen() {
     if (succeed) {
       sfx.confirm();
       pushLog('Got away safely.');
-      setTimeout(() => router.back(), 700);
+      setTimeout(() => router.back(), 350);
     } else {
       setBusy(true);
       sfx.cancel();
       pushLog('Failed to escape!');
-      setTimeout(() => endPlayerTurn(), 700);
+      setTimeout(() => endPlayerTurn(), 350);
     }
   };
 
@@ -269,7 +268,7 @@ export default function CombatScreen() {
         return;
       }
       enemyTurn();
-    }, 200);
+    }, 100);
   };
 
   const enemyTurn = () => {
@@ -304,8 +303,8 @@ export default function CombatScreen() {
         }
         setBusy(false);
         setTurn('player');
-      }, 600);
-    }, 700);
+      }, 300);
+    }, 350);
   };
 
   // ----- end states -----
@@ -332,14 +331,14 @@ export default function CombatScreen() {
       } else {
         router.back();
       }
-    }, 1500);
+    }, 750);
   };
 
   const onDefeat = async () => {
     setTurn('end');
     sfx.defeat();
     pushLog('You collapsed...');
-    setTimeout(() => router.replace('/gameover'), 1200);
+    setTimeout(() => router.replace('/gameover'), 600);
   };
 
   // ----- render -----
@@ -368,7 +367,9 @@ export default function CombatScreen() {
           </View>
 
           {/* Hi-res PNG sprite + drop shadow + subtle idle bob.
-              Boss enemies get a magenta glow ring; normal enemies use a dark elliptical ground shadow. */}
+              FULL sprite is rendered (no clipping, no procedural-leg overlay) so the
+              AI-drawn legs of the enemy show through naturally. resizeMode='contain'
+              guarantees correct aspect ratio with no stretching. */}
           <View style={styles.enemySpriteWrap}>
             {/* Ground shadow */}
             <View style={[
@@ -384,7 +385,7 @@ export default function CombatScreen() {
               <View style={[
                 styles.enemySpriteBox,
                 enemyData.isBoss && styles.enemySpriteBoxBoss,
-                { width: enemyData.isBoss ? 180 : 156, height: enemyData.isBoss ? 180 : 156 },
+                { width: enemyData.isBoss ? 200 : 180, height: enemyData.isBoss ? 200 : 180 },
               ]}>
                 <Image
                   source={{ uri: getEnemySpriteUri(enemyId, enemyData) }}
@@ -403,38 +404,35 @@ export default function CombatScreen() {
           </View>
         </Animated.View>
 
-        {/* Player — same identity as overworld: ADHAMB sprite + procedural legs.
-            Scaled larger and mirrored horizontally so he faces the enemy on the right. */}
+        {/* Player — same identity as overworld: ADHAMB sprite shown in FULL.
+            No more clipped torso + procedural legs (those rendered as solid pink blocks);
+            the AI-painted PNG already contains the legs/boots, so we render it complete.
+            Mirrored horizontally so he faces the enemy on the right. */}
         <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }] }]}>
           <View style={styles.playerSprite}>
             {/* Ground shadow */}
             <View style={styles.playerGroundShadow} pointerEvents="none" />
-            {/* Body (top 70%) — clipped + horizontally flipped so ADHAMB faces right toward the enemy.
-                Subtle idle bob synced with the same animTick as the enemy. */}
+            {/* Full-height ADHAMB sprite with idle bob (synced opposite phase to enemy) */}
             <Animated.View
               style={{
+                width: 150,
+                height: 200,
                 transform: [{ translateY: Math.sin(animTick * 0.35 + Math.PI) * 2.5 }],
               }}
             >
-              <View style={{ width: 110, height: 110, overflow: 'hidden' }}>
-                <Image
-                  source={{ uri: SPRITE_ASSETS.player }}
-                  style={{
-                    width: 110,
-                    height: 158,
-                    backgroundColor: 'transparent',
-                    transform: [{ scaleX: -1 }],   // mirror so he faces the enemy
-                  }}
-                  resizeMode="contain"
-                />
-              </View>
-              {/* Procedural human legs in idle combat-stance (frame 0 = both planted) */}
-              <View style={{ position: 'absolute', left: 0, top: 100, width: 110, height: 60 }}>
-                <WalkingLegs width={110} height={60} frame={0} style="human" />
-              </View>
+              <Image
+                source={{ uri: SPRITE_ASSETS.player }}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: 'transparent',
+                  transform: [{ scaleX: -1 }],   // mirror so he faces the enemy
+                }}
+                resizeMode="contain"
+              />
             </Animated.View>
             {/* Optional translucent shield aura when shield buff is up */}
-            {shield && <View style={[styles.playerShielded, { width: 120, height: 170 }]} pointerEvents="none" />}
+            {shield && <View style={[styles.playerShielded, { width: 160, height: 210 }]} pointerEvents="none" />}
           </View>
           {/* Animated rising damage / heal numbers above the player */}
           <View style={styles.floaterPAnchor} pointerEvents="none">
@@ -594,8 +592,8 @@ const styles = StyleSheet.create({
     marginTop: -40,
   },
   playerSprite: {
-    width: 130,
-    height: 170,
+    width: 160,
+    height: 210,
     alignItems: 'center',
     justifyContent: 'flex-start',
     position: 'relative',
@@ -603,8 +601,8 @@ const styles = StyleSheet.create({
   playerGroundShadow: {
     position: 'absolute',
     bottom: 4,
-    width: 90,
-    height: 12,
+    width: 110,
+    height: 13,
     borderRadius: 100,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignSelf: 'center',

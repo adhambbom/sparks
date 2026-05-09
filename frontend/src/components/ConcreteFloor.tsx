@@ -14,14 +14,16 @@ import Svg, { Rect, Line, Circle } from 'react-native-svg';
  */
 
 // ── Palette ─────────────────────────────────────────────────────────────
-const BASE_LIGHT    = '#b0b0b0';   // primary concrete
-const BASE_DARKER   = '#9a9a9d';   // shaded panel
-const BASE_LIGHTER  = '#bcbcbf';   // highlighted patch
-const SEAM_COLOR    = '#7a7a7d';   // panel seams (slightly darker)
-const CRACK_COLOR   = 'rgba(40, 40, 40, 0.55)';
-const GRIT_DARK     = 'rgba(60, 60, 60, 0.45)';
-const GRIT_LIGHT    = 'rgba(200, 200, 200, 0.35)';
-const STAIN_OIL     = 'rgba(28, 22, 18, 0.32)';
+// Darker cool-grey metallic stone — much less bright than the previous
+// near-white tile so the cyber-castle vibe stays grim and the neon HUD pops.
+const BASE_LIGHT    = '#3f4750';   // primary stone (cool steel-grey)
+const BASE_DARKER   = '#333a42';   // shaded panel
+const BASE_LIGHTER  = '#4a525c';   // highlighted patch
+const SEAM_COLOR    = '#1c2026';   // panel seams (deep crevice)
+const CRACK_COLOR   = 'rgba(8, 10, 14, 0.75)';
+const GRIT_DARK     = 'rgba(15, 18, 24, 0.55)';
+const GRIT_LIGHT    = 'rgba(120, 134, 150, 0.40)';
+const STAIN_OIL     = 'rgba(0, 0, 0, 0.45)';
 
 // Deterministic pseudo-random per (variant, salt)
 function rand(variant: number, salt: number): number {

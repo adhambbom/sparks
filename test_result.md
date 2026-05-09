@@ -121,15 +121,45 @@ frontend:
         comment: |
           Replaced sprite-sheet enemy renderer with high-res PNGs (Scout / Juggernaut)
           via getEnemySpriteUri() heuristic + explicit overrides for all 25 enemies.
-          Added subtle idle bob (animTick-driven), drop shadow ellipse under both
-          combatants, and boss magenta glow ring. Damage/heal numbers now use the
-          animated <Floater /> component (rises + fades) anchored above each target.
-          Battle log restyled to a slim 2-line semi-transparent strip pinned just
-          above the bottom HUD with a cyan accent border. Bundle compiles clean
-          (894 modules, 0 errors). Visual verification via Playwright was blocked
-          by an unrelated UI-side login bug (login POST 200 OK on backend but
-          "Something went wrong" displayed on web — pre-existing, unrelated to
-          this task). User will verify visually in the live game flow.
+          Floaters now use animated <Floater /> rise+fade. Battle log slimmed to a 2-line
+          strip pinned above the bottom HUD.
+
+  - task: "Speed-up + sprite leg fix + map darken"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/game.tsx, /app/frontend/app/combat.tsx, /app/frontend/app/_layout.tsx, /app/frontend/src/components/ConcreteFloor.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: |
+          1) GAMEPLAY 1.5× SPEED-UP:
+             • game.tsx: SPEED 4→6 px/frame (50% faster overworld movement)
+             • game.tsx: ROAM_TICK_MS 2000→1000 (enemy patrol cycle 2× faster)
+             • _layout.tsx: animationDuration: 200ms on Stack screen options
+               (overworld→combat fade now ≤0.3s)
+             • combat.tsx: halved every turn-pacing setTimeout (700→350, 800→400,
+               600→300, 1500→750, 1200→600, etc) — battle log/text printing 2× faster.
+          2) COLORED-LEG-BLOCKS BUG FIX:
+             • combat.tsx + game.tsx: removed the clipped-Image + procedural
+               <WalkingLegs> SVG overlay pattern entirely. The procedural SVG was
+               drawing solid pink (player) and blue (juggernaut) rectangles below
+               the waist — exactly the "colored leg blocks" the user reported.
+             • Now we render the FULL AI-painted PNG with resizeMode='contain' and
+               correct W:H ratio (1:1 for enemies, 17:24 for player) so the legs
+               from the original sprite show through cleanly.
+             • Removed unused WalkingLegs imports from both files.
+          3) MAP REFINEMENT:
+             • ConcreteFloor.tsx palette shifted from light grey (#b0b0b0 family)
+               to a darker cool-steel stone (#3f4750 / #333a42 / #4a525c). Seams
+               and grit colours retuned for the darker base. Cracks deepened to
+               nearly-black so they read on the new palette. Cyber-castle vibe
+               consistent, neon HUD now pops harder against the darker floor.
+          Bundle compiles clean (896 modules). Visual verification by user in
+          live game flow — Playwright auth UI flow blocked by a pre-existing
+          frontend "Something went wrong" login bug (backend returns 200 OK).
 
 metadata:
   created_by: "main_agent"
