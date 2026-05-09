@@ -133,6 +133,10 @@ export default function GameScreen() {
   const bridgeThudFiredRef = useRef(false);
   // pixel position; tile = floor(p/TILE)
   const posRef = useRef({ px: 0, py: 0 });
+  // Smoothed camera position — lerps toward the player each frame so the world
+  // glides instead of hard-snapping at the new high SPEED. Closer-to-1 = stiffer
+  // follow, closer-to-0 = lazier. 0.32 ≈ ~3 frames to catch up at 60 FPS.
+  const camRef = useRef({ x: 0, y: 0 });
   const [renderTick, setRenderTick] = useState(0);
   // Animation tick — increments at 10 fps so sprites animate even when player stands still.
   const [animTick, setAnimTick] = useState(0);
@@ -182,6 +186,8 @@ export default function GameScreen() {
         try { await setPosition(tx, ty); } catch {}
       }
       posRef.current = { px: tx * TILE + TILE / 2, py: ty * TILE + TILE / 2 };
+      // Initialise camera to the player so we don't pan-in from (0,0) on load.
+      camRef.current = { x: posRef.current.px, y: posRef.current.py };
       lastTileRef.current = { x: tx, y: ty };
       // Spawn 3 scout roamers + 1 Juggernaut mini-boss patrolling the corridors
       const occupied = new Set<string>();
@@ -357,6 +363,23 @@ export default function GameScreen() {
           }
         }
         setRenderTick((t) => (t + 1) % 1000);
+      }
+      // Camera follow — lerp the camera position toward the player every
+      // frame so the world glides instead of hard-snapping at high SPEED.
+      // 0.32 ≈ catches up in ~3 frames at 60 FPS — just enough damping to feel
+      // cinematic without ever lagging behind. Snap when close enough so the
+      // float doesn't accumulate drift while the player is idle.
+      {
+        const target = posRef.current;
+        const cam = camRef.current;
+        const dxC = target.px - cam.x;
+        const dyC = target.py - cam.y;
+        if (Math.abs(dxC) > 0.5 || Math.abs(dyC) > 0.5) {
+          camRef.current = { x: cam.x + dxC * 0.32, y: cam.y + dyC * 0.32 };
+          setRenderTick((t) => (t + 1) % 1000);
+        } else if (cam.x !== target.px || cam.y !== target.py) {
+          camRef.current = { x: target.px, y: target.py };
+        }
       }
       raf = requestAnimationFrame(loop);
     };
@@ -547,9 +570,10 @@ export default function GameScreen() {
   const VIEWPORT_HEIGHT = SH - HUD_HEIGHT - CONTROLS_BAND_HEIGHT;
   const VIEWPORT_TOP = HUD_HEIGHT;
 
-  // Camera follow: keep player visually centered within the viewport.
-  const camX = posRef.current.px - SW / 2;
-  const camY = posRef.current.py - VIEWPORT_HEIGHT / 2;
+  // Camera follow: smoothed via lerp inside the game loop. Round to integer
+  // pixels so the SVG floor/wall textures don't sub-pixel-shimmer at high SPEED.
+  const camX = Math.round(camRef.current.x - SW / 2);
+  const camY = Math.round(camRef.current.y - VIEWPORT_HEIGHT / 2);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -823,6 +847,52 @@ export default function GameScreen() {
               </View>
             );
           })()}
+        </View>
+
+        {/* Cinematic vignette — soft edge darkening over the viewport so the
+            scene has depth and the player's tile area pops. Pure RN <View>s
+            with linear gradients (no SVG perf cost), sitting above the world
+            but below the HUD. pointerEvents=none so it never blocks input. */}
+        <View
+          style={{
+            position: 'absolute',
+            top: 0, left: 0, right: 0, height: 60,
+          }}
+          pointerEvents="none"
+        >
+          {/* Fake top vignette via 3 stacked translucent strips */}
+          <View style={{ height: 28, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+          <View style={{ height: 18, backgroundColor: 'rgba(0,0,0,0.22)' }} />
+          <View style={{ height: 14, backgroundColor: 'rgba(0,0,0,0.10)' }} />
+        </View>
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0, left: 0, right: 0, height: 60,
+          }}
+          pointerEvents="none"
+        >
+          <View style={{ height: 14, backgroundColor: 'rgba(0,0,0,0.10)' }} />
+          <View style={{ height: 18, backgroundColor: 'rgba(0,0,0,0.22)' }} />
+          <View style={{ height: 28, backgroundColor: 'rgba(0,0,0,0.45)' }} />
+        </View>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0, bottom: 0, left: 0, width: 36,
+          }}
+          pointerEvents="none"
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.18)' }} />
+        </View>
+        <View
+          style={{
+            position: 'absolute',
+            top: 0, bottom: 0, right: 0, width: 36,
+          }}
+          pointerEvents="none"
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.18)' }} />
         </View>
       </View>
 

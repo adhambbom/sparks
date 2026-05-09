@@ -14,16 +14,21 @@ import Svg, { Rect, Line, Circle } from 'react-native-svg';
  */
 
 // ── Palette ─────────────────────────────────────────────────────────────
-// Darker cool-grey metallic stone — much less bright than the previous
-// near-white tile so the cyber-castle vibe stays grim and the neon HUD pops.
-const BASE_LIGHT    = '#3f4750';   // primary stone (cool steel-grey)
-const BASE_DARKER   = '#333a42';   // shaded panel
-const BASE_LIGHTER  = '#4a525c';   // highlighted patch
-const SEAM_COLOR    = '#1c2026';   // panel seams (deep crevice)
-const CRACK_COLOR   = 'rgba(8, 10, 14, 0.75)';
-const GRIT_DARK     = 'rgba(15, 18, 24, 0.55)';
-const GRIT_LIGHT    = 'rgba(120, 134, 150, 0.40)';
-const STAIN_OIL     = 'rgba(0, 0, 0, 0.45)';
+// Cinematic stone-tile palette: dark enough for the cyber-castle vibe but
+// noticeably brighter than the wall charcoal (#2e2e2e) so floor reads as
+// FLOOR and the neon HUD pops harder. Cool blue-grey hue ties together the
+// brick walls and the magenta accents without ever competing with them.
+const BASE_LIGHT    = '#525a66';   // primary stone (cool steel-grey, +20% over the old #3f4750)
+const BASE_DARKER   = '#3f4753';   // shaded panel
+const BASE_LIGHTER  = '#5e6772';   // highlighted patch
+const SEAM_COLOR    = '#1f2330';   // panel seams (deep crevice)
+const CRACK_COLOR   = 'rgba(8, 10, 14, 0.65)';
+const GRIT_DARK     = 'rgba(15, 18, 24, 0.45)';
+const GRIT_LIGHT    = 'rgba(150, 168, 188, 0.32)';
+const STAIN_OIL     = 'rgba(0, 0, 0, 0.40)';
+// Specular highlight added to the top-left corner of each tile so the floor
+// catches a faint "key light" — sells depth without breaking the pixel-art look.
+const SPEC_HIGHLIGHT = 'rgba(220, 230, 245, 0.10)';
 
 // Deterministic pseudo-random per (variant, salt)
 function rand(variant: number, salt: number): number {
@@ -129,6 +134,11 @@ export default function ConcreteFloor({ size, variant = 0 }: Props) {
 
       {/* (6) Tile edge — very subtle inset shadow so floor reads as a panel */}
       <Rect x={0} y={0} width={size} height={size} fill="none" stroke="rgba(0,0,0,0.22)" strokeWidth={1} />
+
+      {/* (7) Specular key-light from upper-left → adds depth, sells "stone catching light".
+              Two thin rects: one along the top edge, one along the left edge of the tile. */}
+      <Rect x={1} y={1} width={size - 2} height={1} fill={SPEC_HIGHLIGHT} />
+      <Rect x={1} y={1} width={1} height={size - 2} fill={SPEC_HIGHLIGHT} />
     </Svg>
   );
 }
