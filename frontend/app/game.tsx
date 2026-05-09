@@ -334,7 +334,18 @@ export default function GameScreen() {
                 roamersRef.current = remaining;
                 setRoamers(remaining);
                 sfx.encounter();
-                router.push({ pathname: '/combat', params: { enemyId: hit.enemyId, mode: 'random' } });
+                router.push({
+                  pathname: '/combat',
+                  params: {
+                    enemyId: hit.enemyId,
+                    mode: 'random',
+                    // Pass the same `boss` flag the overworld used to render
+                    // the roamer's sprite, so combat can pick the matching
+                    // sprite (Juggernaut for boss, Scout otherwise) and the
+                    // visual stays consistent across screens.
+                    boss: hit.boss ? '1' : '0',
+                  },
+                });
                 dirRef.current = { x: 0, y: 0 };
               }
             }

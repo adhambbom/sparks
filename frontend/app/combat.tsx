@@ -15,62 +15,37 @@ type ActionPanel = 'main' | 'skills' | 'items';
 const { width: SW } = Dimensions.get('window');
 
 // ----- Enemy sprite picker -----
-// We have two production PNGs (Scout & Juggernaut). Map every enemy to whichever
-// archetype best fits, so combat visuals match the overworld aesthetic.
+// MUST match the overworld's rule exactly so the enemy you bumped into in
+// game.tsx still looks the same in the battle screen:
+//     overworld:   `roamer.boss ? Juggernaut : Scout`
+// Combat receives the boss flag via the `boss` route param ('1' / '0'), with
+// `enemyData.isBoss` (from the data file) used as a fallback for boss-tile
+// encounters that don't go through the roamer system.
 function getEnemySpriteUri(
-  enemyId: string,
-  e: { spd: number; def: number; hp: number; isBoss?: boolean },
+  bossFromRoute: boolean,
+  e: { isBoss?: boolean },
 ): string {
-  const SCOUT = SPRITE_ASSETS.enemyScout;
-  const JUGGER = SPRITE_ASSETS.enemyJuggernaut;
-  const overrides: Record<string, string> = {
-    // Light / fast
-    spider_bot: SCOUT,
-    tinkerer_drone: SCOUT,
-    tesla_drone: SCOUT,
-    laser_wasp: SCOUT,
-    crawler_fly: SCOUT,
-    data_ghost: SCOUT,
-    hover_sentry: SCOUT,
-    clockwork_beast: SCOUT,
-    bio_lizard: SCOUT,
-    plasma_brain: SCOUT,
-    neuro_crab: SCOUT,
-    // Heavy / armored / bosses
-    gear_golem: JUGGER,
-    scrap_collector: JUGGER,
-    piston_ogre: JUGGER,
-    steam_mutant: JUGGER,
-    armored_centipede: JUGGER,
-    mutant_assembler: JUGGER,
-    core_keeper: JUGGER,
-    glitch_avatar: JUGGER,
-    glitch_final: JUGGER,
-    tentacle_mech: JUGGER,
-    crawler_chimaera: JUGGER,
-    multi_gynoid: JUGGER,
-    spike_mutant: JUGGER,
-    bio_serpent: JUGGER,
-    generator_kin: JUGGER,
-  };
-  if (overrides[enemyId]) return overrides[enemyId];
-  // Fallback heuristic
-  if (e.isBoss || e.def >= 9 || e.hp >= 80) return JUGGER;
-  return SCOUT;
+  return (bossFromRoute || e.isBoss) ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
 }
 
 export default function CombatScreen() {
-  const params = useLocalSearchParams<{ enemyId: string; mode?: string; arenaWave?: string }>();
+  const params = useLocalSearchParams<{ enemyId: string; mode?: string; arenaWave?: string; boss?: string }>();
+  // Did the overworld flag this encounter as a mini-boss roamer? If so we use
+  // the Juggernaut sprite to match what was rendered in the castle screen.
+  const bossFromRoute = params.boss === '1' || params.mode === 'boss';
   const { state, applyDamage, applyHeal, applyMpCost, awardXp, addGold, addItem, removeItem, saveToServer } = useGame();
   const [enemyId] = useState<string>(params.enemyId || 'spider_bot');
   const enemyData = ENEMIES[enemyId];
+  // Unified boss flag — true if either the data-file marks this enemy as a
+  // boss OR the overworld passed boss=1 (mini-boss roamer / boss tile route).
+  const isBoss = !!enemyData?.isBoss || bossFromRoute;
   const [enemyHp, setEnemyHp] = useState(enemyData?.hp || 30);
   const [enemyAtk, setEnemyAtk] = useState(enemyData?.atk || 5);
   const [enemyAbilities, setEnemyAbilities] = useState<string[]>(enemyData?.abilities || ['power_strike']);
   const [phaseChanged, setPhaseChanged] = useState(false);
   const [phaseFlash, setPhaseFlash] = useState(false);
   const [log, setLog] = useState<string[]>([
-    enemyData?.isBoss ? `⚠ BOSS: ${enemyData?.name} appears!` : `A wild ${enemyData?.name} appears!`,
+    isBoss ? `⚠ BOSS: ${enemyData?.name} appears!` : `A wild ${enemyData?.name} appears!`,
   ]);
   const [panel, setPanel] = useState<ActionPanel>('main');
   const [turn, setTurn] = useState<'player' | 'enemy' | 'end'>('player');
@@ -100,7 +75,7 @@ export default function CombatScreen() {
 
   // Determine first turn based on speed + boss intro SFX
   useEffect(() => {
-    if (enemyData?.isBoss) sfx.bossPhase(); else sfx.encounter();
+    if (isBoss) sfx.bossPhase(); else sfx.encounter();
     if (player.spd < enemyData.spd) {
       setTimeout(() => enemyTurn(), 350);
     }
@@ -109,7 +84,7 @@ export default function CombatScreen() {
 
   // Boss phase change check - triggers once at 50% HP
   useEffect(() => {
-    if (!enemyData?.isBoss || phaseChanged) return;
+    if (!isBoss || phaseChanged) return;
     if (enemyHp > 0 && enemyHp <= enemyData.hp * 0.5) {
       setPhaseChanged(true);
       setPhaseFlash(true);
@@ -230,7 +205,7 @@ export default function CombatScreen() {
       sfx.cancel();
       return;
     }
-    if (enemyData.isBoss) {
+    if (isBoss) {
       pushLog('No retreat from a boss!');
       sfx.cancel();
       return;
@@ -374,14 +349,14 @@ export default function CombatScreen() {
         <Animated.View style={[styles.enemyAnchor, { transform: [{ translateX: enemyShake }] }]}>
           {/* Compact nameplate card sitting flush left, above the sprite. */}
           <View style={styles.enemyNamePlate}>
-            <PixelText size={12} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.neonRed} bold glow={enemyData.isBoss}>
-              {enemyData.isBoss ? '⚠ ' : ''}{enemyData.name.toUpperCase()}{phaseChanged ? ' [ENRAGED]' : ''}
+            <PixelText size={12} color={isBoss ? COLORS.neonMagenta : COLORS.neonRed} bold glow={isBoss}>
+              {isBoss ? '⚠ ' : ''}{enemyData.name.toUpperCase()}{phaseChanged ? ' [ENRAGED]' : ''}
             </PixelText>
             <PixelText size={8} color={COLORS.textDim}>
-              TIER {enemyData.tier} · SPD {enemyData.spd}{enemyData.isBoss ? ' · BOSS' : ''}
+              TIER {enemyData.tier} · SPD {enemyData.spd}{isBoss ? ' · BOSS' : ''}
             </PixelText>
             <View style={{ marginTop: 4 }}>
-              <StatBar value={enemyHp} max={enemyData.hp} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.hp} bgColor={COLORS.hpBg} width={170} height={8} showText={false} />
+              <StatBar value={enemyHp} max={enemyData.hp} color={isBoss ? COLORS.neonMagenta : COLORS.hp} bgColor={COLORS.hpBg} width={170} height={8} showText={false} />
             </View>
           </View>
 
@@ -389,7 +364,7 @@ export default function CombatScreen() {
           <View style={[styles.enemySpriteWrap, { zIndex: 10, alignItems: 'flex-start' }]}>
             <View style={[
               styles.groundShadow,
-              { width: enemyData.isBoss ? 120 : 100, alignSelf: 'flex-start', marginLeft: 18 },
+              { width: isBoss ? 120 : 100, alignSelf: 'flex-start', marginLeft: 18 },
             ]} pointerEvents="none" />
             <Animated.View
               style={{
@@ -399,11 +374,11 @@ export default function CombatScreen() {
             >
               <View style={[
                 styles.enemySpriteBox,
-                enemyData.isBoss && styles.enemySpriteBoxBoss,
-                { width: enemyData.isBoss ? 170 : 150, height: enemyData.isBoss ? 170 : 150 },
+                isBoss && styles.enemySpriteBoxBoss,
+                { width: isBoss ? 170 : 150, height: isBoss ? 170 : 150 },
               ]}>
                 <Image
-                  source={{ uri: getEnemySpriteUri(enemyId, enemyData) }}
+                  source={{ uri: getEnemySpriteUri(bossFromRoute, enemyData) }}
                   style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
                   resizeMode="contain"
                 />
