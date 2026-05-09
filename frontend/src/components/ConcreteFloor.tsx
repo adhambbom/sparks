@@ -14,18 +14,17 @@ import Svg, { Rect, Line, Circle } from 'react-native-svg';
  */
 
 // ── Palette ─────────────────────────────────────────────────────────────
-// Deep cyber-castle NAVY-BLUE stone — explicitly blue (not grey) so the
-// bright pink/cyan ADHAMB and neon enemies pop hard against a moody floor.
-const BASE_LIGHT    = '#1d2742';   // primary stone (deep navy blue)
-const BASE_DARKER   = '#141b30';   // shaded panel
-const BASE_LIGHTER  = '#27345a';   // highlighted patch
-const SEAM_COLOR    = '#070a14';   // panel seams (near-black crevice)
+// Cyber-castle DEEP-NAVY stone — pushed near-black to guarantee the floor reads
+// dark even on devices with aggressive bundle caching (was #1d2742 → #0c1226).
+const BASE_LIGHT    = '#0c1226';   // primary stone (very deep navy, near-black)
+const BASE_DARKER   = '#070b1a';   // shaded panel (almost black)
+const BASE_LIGHTER  = '#172244';   // highlighted patch (still distinctly navy)
+const SEAM_COLOR    = '#02040c';   // panel seams (true black-ish crevice)
 const CRACK_COLOR   = 'rgba(0, 0, 0, 0.55)';
 const GRIT_DARK     = 'rgba(0, 0, 0, 0.40)';
-const GRIT_LIGHT    = 'rgba(120, 150, 200, 0.20)';
+const GRIT_LIGHT    = 'rgba(120, 150, 200, 0.18)';
 const STAIN_OIL     = 'rgba(0, 0, 0, 0.35)';
-// Faint blue-cyan specular streak — sells depth without making the floor look grey.
-const SPEC_HIGHLIGHT = 'rgba(150, 200, 240, 0.08)';
+const SPEC_HIGHLIGHT = 'rgba(150, 200, 240, 0.06)';
 
 // Deterministic pseudo-random per (variant, salt)
 function rand(variant: number, salt: number): number {
