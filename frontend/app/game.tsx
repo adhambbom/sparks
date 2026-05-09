@@ -590,29 +590,6 @@ export default function GameScreen() {
     setPauseOpen(false);
   };
 
-  if (authLoading || !loaded || !state) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={COLORS.neonCyan} size="large" />
-      </View>
-    );
-  }
-
-  // ──────────────────────────────────────────────────────────
-  // Layout constants — keep gameplay in upper 65% of screen
-  // ──────────────────────────────────────────────────────────
-  // HUD = ~125px (two rows). Controls = bottom 35% of total screen.
-  // Game viewport sits between HUD bottom and controls top.
-  const HUD_HEIGHT = 125;
-  const CONTROLS_BAND_HEIGHT = SH * 0.35;
-  const VIEWPORT_HEIGHT = SH - HUD_HEIGHT - CONTROLS_BAND_HEIGHT;
-  const VIEWPORT_TOP = HUD_HEIGHT;
-
-  // Camera follow: smoothed via lerp inside the game loop. Round to integer
-  // pixels so the SVG floor/wall textures don't sub-pixel-shimmer at high SPEED.
-  const camX = Math.round(camRef.current.x - SW / 2);
-  const camY = Math.round(camRef.current.y - VIEWPORT_HEIGHT / 2);
-
   // ──────────────────────────────────────────────────────────
   // Memoized static map render
   // ──────────────────────────────────────────────────────────
@@ -621,6 +598,10 @@ export default function GameScreen() {
   // cause of jank on lower-end Android devices. By memoizing on the inputs
   // that actually change (brokenBarrels, animTick), we cut the work to
   // ~10 renders/sec for the static layer regardless of player movement.
+  //
+  // IMPORTANT: these hooks MUST live above the early-return guard so the
+  // hook count is identical on the loading render and on subsequent renders
+  // (Rules of Hooks).
   const tileGrid = useMemo(
     () =>
       ACADEMY_MAP.map((row, y) => (
@@ -715,6 +696,29 @@ export default function GameScreen() {
       ),
     [brokenBarrels, animTick]
   );
+
+  if (authLoading || !loaded || !state) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={COLORS.neonCyan} size="large" />
+      </View>
+    );
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // Layout constants — keep gameplay in upper 65% of screen
+  // ──────────────────────────────────────────────────────────
+  // HUD = ~125px (two rows). Controls = bottom 35% of total screen.
+  // Game viewport sits between HUD bottom and controls top.
+  const HUD_HEIGHT = 125;
+  const CONTROLS_BAND_HEIGHT = SH * 0.35;
+  const VIEWPORT_HEIGHT = SH - HUD_HEIGHT - CONTROLS_BAND_HEIGHT;
+  const VIEWPORT_TOP = HUD_HEIGHT;
+
+  // Camera follow: smoothed via lerp inside the game loop. Round to integer
+  // pixels so the SVG floor/wall textures don't sub-pixel-shimmer at high SPEED.
+  const camX = Math.round(camRef.current.x - SW / 2);
+  const camY = Math.round(camRef.current.y - VIEWPORT_HEIGHT / 2);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
