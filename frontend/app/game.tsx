@@ -427,11 +427,28 @@ export default function GameScreen() {
       return;
     }
     if (tile === 10) {
-      // Power Console - heal + small reward
+      // Power Console — ONE-TIME emergency heal. Mirrors the Sapphire-Core
+      // claim pattern so players can't camp on the tile and spam +40 HP.
+      const consoleClaimed = state?.world?.completedTrials?.includes('power_console');
+      if (consoleClaimed) {
+        setHint('CONSOLE — already activated');
+        setTimeout(() => setHint(''), 1500);
+        return;
+      }
       sfx.heal();
       applyHeal(40);
+      if (state) {
+        setState({
+          ...state,
+          world: {
+            ...state.world,
+            completedTrials: [...(state.world.completedTrials || []), 'power_console'],
+          },
+        });
+      }
       setHint('CONSOLE ACTIVATED · +40 HP');
       setTimeout(() => setHint(''), 2000);
+      saveCheckpoint();
       return;
     }
     // Find nearby NPC (within 1 tile)
