@@ -124,6 +124,34 @@ frontend:
           Floaters now use animated <Floater /> rise+fade. Battle log slimmed to a 2-line
           strip pinned above the bottom HUD.
 
+  - task: "Battle UI layout reorg (log-top + green stats panel + 2x2 actions)"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/combat.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: |
+          Applied the user's TypeScript layout config to combat.tsx:
+          (1) Combat log moved to the very TOP of the screen — semi-transparent
+              black card (rgba(0,0,0,0.4)), 4px border-radius, full-width with 10px
+              margins, well clear of the character sprites.
+          (2) Character sprites (enemy + player) given explicit zIndex: 10 so they
+              are never covered by background text or other UI.
+          (3) Player stats are now wrapped in a `playerInfoPanel` card with a green
+              outline (#4CAF50, 2px), 6px border-radius, 10px padding, on a faint
+              dark-green wash background.
+          (4) Action menu converted from flex-wrap row to a true 2×2 grid via
+              flex-wrap + 48.5%-width cells (RN has no `display: grid`, so this is
+              the canonical RN equivalent). All 4 buttons are full-width within
+              their cells via the `full` PixelButton prop.
+          Stage paddingTop reduced from 50→8 since the new top log already creates
+          breathing room. Bundle compiles clean (861 modules). Visual verification
+          by user in their live session.
+
   - task: "Speed-up + sprite leg fix + map darken"
     implemented: true
     working: NA

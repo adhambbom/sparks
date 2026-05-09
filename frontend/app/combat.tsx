@@ -347,7 +347,22 @@ export default function CombatScreen() {
       {/* Background */}
       <View style={styles.bgGrid} />
 
-      {/* Battle stage */}
+      {/* (1) COMBAT LOG — pinned at the very TOP, well clear of the character sprites.
+          Semi-transparent black card per the new layout spec. */}
+      <View style={styles.logBox} pointerEvents="none">
+        {log.slice(-2).map((l, i, arr) => (
+          <PixelText
+            key={`${i}-${l}`}
+            size={10}
+            color={i === arr.length - 1 ? COLORS.text : COLORS.textDim}
+            numberOfLines={1}
+          >
+            {l}
+          </PixelText>
+        ))}
+      </View>
+
+      {/* (2) BATTLE STAGE — character sprites get explicit zIndex so they stay on top */}
       <View style={styles.stage}>
         {/* Phase change flash */}
         {phaseFlash && <View style={styles.phaseFlash} pointerEvents="none" />}
@@ -370,7 +385,7 @@ export default function CombatScreen() {
               FULL sprite is rendered (no clipping, no procedural-leg overlay) so the
               AI-drawn legs of the enemy show through naturally. resizeMode='contain'
               guarantees correct aspect ratio with no stretching. */}
-          <View style={styles.enemySpriteWrap}>
+          <View style={[styles.enemySpriteWrap, { zIndex: 10 }]}>
             {/* Ground shadow */}
             <View style={[
               styles.groundShadow,
@@ -380,6 +395,7 @@ export default function CombatScreen() {
             <Animated.View
               style={{
                 transform: [{ translateY: Math.sin(animTick * 0.35) * 3 }],
+                zIndex: 10,
               }}
             >
               <View style={[
@@ -404,20 +420,16 @@ export default function CombatScreen() {
           </View>
         </Animated.View>
 
-        {/* Player — same identity as overworld: ADHAMB sprite shown in FULL.
-            No more clipped torso + procedural legs (those rendered as solid pink blocks);
-            the AI-painted PNG already contains the legs/boots, so we render it complete.
-            Mirrored horizontally so he faces the enemy on the right. */}
-        <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }] }]}>
+        {/* Player — same identity as overworld: ADHAMB sprite shown in FULL. */}
+        <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }], zIndex: 10 }]}>
           <View style={styles.playerSprite}>
-            {/* Ground shadow */}
             <View style={styles.playerGroundShadow} pointerEvents="none" />
-            {/* Full-height ADHAMB sprite with idle bob (synced opposite phase to enemy) */}
             <Animated.View
               style={{
                 width: 150,
                 height: 200,
                 transform: [{ translateY: Math.sin(animTick * 0.35 + Math.PI) * 2.5 }],
+                zIndex: 10,
               }}
             >
               <Image
@@ -426,15 +438,13 @@ export default function CombatScreen() {
                   width: '100%',
                   height: '100%',
                   backgroundColor: 'transparent',
-                  transform: [{ scaleX: -1 }],   // mirror so he faces the enemy
+                  transform: [{ scaleX: -1 }],
                 }}
                 resizeMode="contain"
               />
             </Animated.View>
-            {/* Optional translucent shield aura when shield buff is up */}
             {shield && <View style={[styles.playerShielded, { width: 160, height: 210 }]} pointerEvents="none" />}
           </View>
-          {/* Animated rising damage / heal numbers above the player */}
           <View style={styles.floaterPAnchor} pointerEvents="none">
             {floaters.filter(f => f.side === 'p').map(f => (
               <Floater key={f.id} text={f.text} color={f.color} size={20} />
@@ -443,43 +453,40 @@ export default function CombatScreen() {
         </Animated.View>
       </View>
 
-      {/* Battle log — slim 2-line overlay just above the bottom HUD so it never crowds the stage. */}
-      <View style={styles.logBox} pointerEvents="none">
-        {log.slice(-2).map((l, i, arr) => (
-          <PixelText
-            key={`${i}-${l}`}
-            size={10}
-            color={i === arr.length - 1 ? COLORS.text : COLORS.textDim}
-            numberOfLines={1}
-          >
-            {l}
-          </PixelText>
-        ))}
-      </View>
-
-      {/* Bottom HUD with player bars + actions */}
+      {/* (3) PLAYER INFO PANEL — green-outlined stats card per layout spec
+              + (4) ACTION MENU (2×2 grid) directly underneath. */}
       <View style={styles.bottomHud}>
-        <View style={styles.statRow}>
-          <View style={{ flex: 1 }}>
-            <PixelText size={11} color={COLORS.neonCyan} bold>{player.name.toUpperCase()} · LV {player.level}</PixelText>
-            <View style={{ height: 4 }} />
-            <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={150} height={9} />
-            <View style={{ height: 4 }} />
-            <StatBar value={player.mp} max={player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={150} height={9} />
-          </View>
-          <View style={styles.statusIcons}>
-            {shield && <PixelText size={10} color={COLORS.neonCyan} bold>◇SHIELD</PixelText>}
-            {haste && <PixelText size={10} color={COLORS.neonMagenta} bold>»HASTE</PixelText>}
-            {enemyBurn > 0 && <PixelText size={10} color="#ff8000" bold>🔥{enemyBurn}</PixelText>}
+        <View style={styles.playerInfoPanel}>
+          <View style={styles.statRow}>
+            <View style={{ flex: 1 }}>
+              <PixelText size={11} color={COLORS.neonGreen} bold>{player.name.toUpperCase()} · LV {player.level}</PixelText>
+              <View style={{ height: 4 }} />
+              <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={150} height={9} />
+              <View style={{ height: 4 }} />
+              <StatBar value={player.mp} max={player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={150} height={9} />
+            </View>
+            <View style={styles.statusIcons}>
+              {shield && <PixelText size={10} color={COLORS.neonCyan} bold>◇SHIELD</PixelText>}
+              {haste && <PixelText size={10} color={COLORS.neonMagenta} bold>»HASTE</PixelText>}
+              {enemyBurn > 0 && <PixelText size={10} color="#ff8000" bold>🔥{enemyBurn}</PixelText>}
+            </View>
           </View>
         </View>
 
         {turn === 'player' && !busy && panel === 'main' && (
           <View style={styles.actionGrid}>
-            <PixelButton title="ATTACK" onPress={playerAttack} color={COLORS.neonRed} testID="combat-attack" />
-            <PixelButton title="SKILL" onPress={() => setPanel('skills')} color={COLORS.neonCyan} testID="combat-skill" />
-            <PixelButton title="ITEM" onPress={() => setPanel('items')} color={COLORS.neonGreen} testID="combat-item" />
-            <PixelButton title="RUN" onPress={playerRun} color={COLORS.textDim} testID="combat-run" />
+            <View style={styles.actionCell}>
+              <PixelButton title="ATTACK" onPress={playerAttack} color={COLORS.neonRed} testID="combat-attack" full />
+            </View>
+            <View style={styles.actionCell}>
+              <PixelButton title="SKILL" onPress={() => setPanel('skills')} color={COLORS.neonCyan} testID="combat-skill" full />
+            </View>
+            <View style={styles.actionCell}>
+              <PixelButton title="ITEM" onPress={() => setPanel('items')} color={COLORS.neonGreen} testID="combat-item" full />
+            </View>
+            <View style={styles.actionCell}>
+              <PixelButton title="RUN" onPress={playerRun} color={COLORS.textDim} testID="combat-run" full />
+            </View>
           </View>
         )}
 
@@ -549,7 +556,7 @@ const styles = StyleSheet.create({
   stage: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 50,
+    paddingTop: 8,
   },
   enemyBox: { alignItems: 'center', minHeight: 240 },
   enemyHeaderRow: { flexDirection: 'row', alignItems: 'center' },
@@ -629,27 +636,49 @@ const styles = StyleSheet.create({
     zIndex: 50,
   },
 
-  // Slim battle-log strip pinned just above the bottom HUD.
+  // (1) Combat-log card pinned at the very TOP of the screen — semi-transparent
+  //     black bg, rounded, full width, well clear of the character sprites.
   logBox: {
-    marginHorizontal: 12,
-    marginBottom: 4,
-    backgroundColor: 'rgba(10,10,20,0.72)',
-    borderLeftWidth: 2,
-    borderLeftColor: COLORS.neonCyan,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minHeight: 30,
+    marginHorizontal: 10,
+    marginTop: 10,
+    marginBottom: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 38,
+    zIndex: 1,
+  },
+  // (3) Player-info panel: green-outlined stats card per the new layout spec.
+  playerInfoPanel: {
+    width: '100%',
+    marginBottom: 10,
+    padding: 10,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    borderRadius: 6,
+    backgroundColor: 'rgba(10, 18, 12, 0.55)',
+    zIndex: 2,
   },
   bottomHud: {
     backgroundColor: COLORS.panel,
-    borderTopWidth: 2, borderTopColor: COLORS.neonCyan,
-    padding: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
   },
-  statRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  statRow: { flexDirection: 'row', alignItems: 'center' },
   statusIcons: { gap: 2, alignItems: 'flex-end' },
+  // (4) Action menu — 2×2 grid (RN-Web has no `display: grid`, so we fake it
+  //     with flex-wrap + 48%-width cells).
   actionGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', gap: 8,
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
+    rowGap: 8,
+    zIndex: 2,
+  },
+  actionCell: {
+    width: '48.5%',
   },
   skillsRow: { gap: 8, paddingVertical: 6 },
   skillBtn: {
