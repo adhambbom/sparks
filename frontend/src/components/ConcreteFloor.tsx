@@ -14,21 +14,18 @@ import Svg, { Rect, Line, Circle } from 'react-native-svg';
  */
 
 // ── Palette ─────────────────────────────────────────────────────────────
-// Deep cyber-castle stone — much darker than walls so the bright characters
-// (pink/cyan ADHAMB, neon enemies) read as the focal point. The cool steel
-// hue still ties everything together; specular key-light keeps the floor from
-// going flat.
-const BASE_LIGHT    = '#2c333d';   // primary stone (deep cool steel)
-const BASE_DARKER   = '#222831';   // shaded panel
-const BASE_LIGHTER  = '#353e48';   // highlighted patch
-const SEAM_COLOR    = '#13171f';   // panel seams (near-black crevice)
+// Deep cyber-castle NAVY-BLUE stone — explicitly blue (not grey) so the
+// bright pink/cyan ADHAMB and neon enemies pop hard against a moody floor.
+const BASE_LIGHT    = '#1d2742';   // primary stone (deep navy blue)
+const BASE_DARKER   = '#141b30';   // shaded panel
+const BASE_LIGHTER  = '#27345a';   // highlighted patch
+const SEAM_COLOR    = '#070a14';   // panel seams (near-black crevice)
 const CRACK_COLOR   = 'rgba(0, 0, 0, 0.55)';
 const GRIT_DARK     = 'rgba(0, 0, 0, 0.40)';
-const GRIT_LIGHT    = 'rgba(140, 158, 178, 0.22)';
+const GRIT_LIGHT    = 'rgba(120, 150, 200, 0.20)';
 const STAIN_OIL     = 'rgba(0, 0, 0, 0.35)';
-// Top-left specular streak — keeps floor from going flat against the dark
-// palette by simulating a faint upper-left key light reflection.
-const SPEC_HIGHLIGHT = 'rgba(220, 230, 245, 0.08)';
+// Faint blue-cyan specular streak — sells depth without making the floor look grey.
+const SPEC_HIGHLIGHT = 'rgba(150, 200, 240, 0.08)';
 
 // Deterministic pseudo-random per (variant, salt)
 function rand(variant: number, salt: number): number {
