@@ -38,13 +38,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const { data } = await api.post('/auth/login', { email, password });
     if (data.access_token) await AsyncStorage.setItem('access_token', data.access_token);
-    setUser({ id: data.id, email: data.email, name: data.name, role: data.role });
+    // Login response only returns tokens — fetch the full user profile separately.
+    await fetchMe();
   };
 
   const register = async (email: string, password: string, name: string) => {
     const { data } = await api.post('/auth/register', { email, password, name });
     if (data.access_token) await AsyncStorage.setItem('access_token', data.access_token);
-    setUser({ id: data.id, email: data.email, name: data.name, role: data.role });
+    await fetchMe();
   };
 
   const logout = async () => {

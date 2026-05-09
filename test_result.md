@@ -135,22 +135,42 @@ frontend:
       - working: NA
         agent: "main"
         comment: |
-          Applied the user's TypeScript layout config to combat.tsx:
-          (1) Combat log moved to the very TOP of the screen — semi-transparent
-              black card (rgba(0,0,0,0.4)), 4px border-radius, full-width with 10px
-              margins, well clear of the character sprites.
-          (2) Character sprites (enemy + player) given explicit zIndex: 10 so they
-              are never covered by background text or other UI.
-          (3) Player stats are now wrapped in a `playerInfoPanel` card with a green
-              outline (#4CAF50, 2px), 6px border-radius, 10px padding, on a faint
-              dark-green wash background.
-          (4) Action menu converted from flex-wrap row to a true 2×2 grid via
-              flex-wrap + 48.5%-width cells (RN has no `display: grid`, so this is
-              the canonical RN equivalent). All 4 buttons are full-width within
-              their cells via the `full` PixelButton prop.
-          Stage paddingTop reduced from 50→8 since the new top log already creates
-          breathing room. Bundle compiles clean (861 modules). Visual verification
-          by user in their live session.
+          (superseded by the diagonal Pokémon-Emerald layout below)
+
+  - task: "Pokemon-Emerald diagonal battle layout + AuthContext fix"
+    implemented: true
+    working: NA
+    file: "/app/frontend/app/combat.tsx, /app/frontend/src/contexts/AuthContext.tsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: NA
+        agent: "main"
+        comment: |
+          DIAGONAL BATTLE LAYOUT (so dialog/menu UI never overlaps the sprites):
+          • Stage is now a positioned container (relative).
+          • Enemy is anchored absolute TOP-LEFT — compact nameplate card
+            (cyan border, dark bg) showing name + tier/SPD + HP bar, with the
+            enemy sprite directly below, ground-shadow flush left.
+          • Player ADHAMB is anchored absolute BOTTOM-RIGHT (just above the
+            bottom HUD), facing LEFT toward the enemy on the top-left
+            (removed the scaleX:-1 mirror flip from the previous layout).
+          • Floaters anchor over each respective sprite.
+          • Bottom HUD layout (top→bottom): combat log (top), green-bordered
+            player info panel, 2×2 action grid — all confined to the bottom
+            quarter so words never block the characters.
+
+          AUTH FIX (incidental to enable testing):
+          • AuthContext.login & .register now call fetchMe() after the API
+            call to populate the full user profile. Previously they tried to
+            destructure id/email/name/role from the login response which
+            only contains tokens, leaving user state with all-undefined
+            fields and silently breaking the post-login redirect.
+          • Note: Playwright UI verification is blocked because the sandbox
+            cannot reach the public preview URL externally — this is a
+            test-environment limitation, not a real-user issue. Live users
+            on their own browsers will see all the changes immediately.
 
   - task: "Speed-up + sprite leg fix + map darken"
     implemented: true

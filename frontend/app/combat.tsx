@@ -362,36 +362,35 @@ export default function CombatScreen() {
         ))}
       </View>
 
-      {/* (2) BATTLE STAGE — character sprites get explicit zIndex so they stay on top */}
+      {/* (2) BATTLE STAGE — Pokémon-Emerald diagonal positioning so the dialog/menu
+          UI never overlaps the character sprites. Enemy floats TOP-LEFT, player
+          ADHAMB floats BOTTOM-RIGHT. Stage uses absolute positioning inside a
+          relative container. */}
       <View style={styles.stage}>
         {/* Phase change flash */}
         {phaseFlash && <View style={styles.phaseFlash} pointerEvents="none" />}
 
-        {/* Enemy */}
-        <Animated.View style={[styles.enemyBox, { transform: [{ translateX: enemyShake }] }]}>
-          <View style={styles.enemyHeaderRow}>
-            <PixelText size={14} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.neonRed} bold glow={enemyData.isBoss}>
+        {/* ── Enemy: TOP-LEFT corner ───────────────────────────────────── */}
+        <Animated.View style={[styles.enemyAnchor, { transform: [{ translateX: enemyShake }] }]}>
+          {/* Compact nameplate card sitting flush left, above the sprite. */}
+          <View style={styles.enemyNamePlate}>
+            <PixelText size={12} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.neonRed} bold glow={enemyData.isBoss}>
               {enemyData.isBoss ? '⚠ ' : ''}{enemyData.name.toUpperCase()}{phaseChanged ? ' [ENRAGED]' : ''}
             </PixelText>
-          </View>
-          <PixelText size={9} color={COLORS.textDim}>
-            TIER {enemyData.tier} · SPD {enemyData.spd}{enemyData.isBoss ? ' · BOSS' : ''}
-          </PixelText>
-          <View style={{ marginTop: 6 }}>
-            <StatBar value={enemyHp} max={enemyData.hp} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.hp} bgColor={COLORS.hpBg} width={240} height={10} showText={false} />
+            <PixelText size={8} color={COLORS.textDim}>
+              TIER {enemyData.tier} · SPD {enemyData.spd}{enemyData.isBoss ? ' · BOSS' : ''}
+            </PixelText>
+            <View style={{ marginTop: 4 }}>
+              <StatBar value={enemyHp} max={enemyData.hp} color={enemyData.isBoss ? COLORS.neonMagenta : COLORS.hp} bgColor={COLORS.hpBg} width={170} height={8} showText={false} />
+            </View>
           </View>
 
-          {/* Hi-res PNG sprite + drop shadow + subtle idle bob.
-              FULL sprite is rendered (no clipping, no procedural-leg overlay) so the
-              AI-drawn legs of the enemy show through naturally. resizeMode='contain'
-              guarantees correct aspect ratio with no stretching. */}
-          <View style={[styles.enemySpriteWrap, { zIndex: 10 }]}>
-            {/* Ground shadow */}
+          {/* Enemy sprite — anchored to the same top-left zone, below the plate. */}
+          <View style={[styles.enemySpriteWrap, { zIndex: 10, alignItems: 'flex-start' }]}>
             <View style={[
               styles.groundShadow,
-              { width: enemyData.isBoss ? 130 : 110 },
+              { width: enemyData.isBoss ? 120 : 100, alignSelf: 'flex-start', marginLeft: 18 },
             ]} pointerEvents="none" />
-            {/* Sprite (idle bob) */}
             <Animated.View
               style={{
                 transform: [{ translateY: Math.sin(animTick * 0.35) * 3 }],
@@ -401,7 +400,7 @@ export default function CombatScreen() {
               <View style={[
                 styles.enemySpriteBox,
                 enemyData.isBoss && styles.enemySpriteBoxBoss,
-                { width: enemyData.isBoss ? 200 : 180, height: enemyData.isBoss ? 200 : 180 },
+                { width: enemyData.isBoss ? 170 : 150, height: enemyData.isBoss ? 170 : 150 },
               ]}>
                 <Image
                   source={{ uri: getEnemySpriteUri(enemyId, enemyData) }}
@@ -410,8 +409,7 @@ export default function CombatScreen() {
                 />
               </View>
             </Animated.View>
-
-            {/* Animated rising damage numbers (centered above the enemy sprite) */}
+            {/* Floaters anchored above the enemy sprite */}
             <View style={styles.floaterEAnchor} pointerEvents="none">
               {floaters.filter(f => f.side === 'e').map(f => (
                 <Floater key={f.id} text={f.text} color={f.color} size={24} />
@@ -420,31 +418,32 @@ export default function CombatScreen() {
           </View>
         </Animated.View>
 
-        {/* Player — same identity as overworld: ADHAMB sprite shown in FULL. */}
-        <Animated.View style={[styles.playerBox, { transform: [{ translateX: playerShake }], zIndex: 10 }]}>
+        {/* ── Player ADHAMB: BOTTOM-RIGHT corner, faces LEFT toward enemy ── */}
+        <Animated.View style={[styles.playerAnchor, { transform: [{ translateX: playerShake }], zIndex: 10 }]}>
           <View style={styles.playerSprite}>
             <View style={styles.playerGroundShadow} pointerEvents="none" />
             <Animated.View
               style={{
-                width: 150,
-                height: 200,
+                width: 130,
+                height: 175,
                 transform: [{ translateY: Math.sin(animTick * 0.35 + Math.PI) * 2.5 }],
                 zIndex: 10,
               }}
             >
+              {/* No mirror flip — sprite faces LEFT toward the enemy on top-left. */}
               <Image
                 source={{ uri: SPRITE_ASSETS.player }}
                 style={{
                   width: '100%',
                   height: '100%',
                   backgroundColor: 'transparent',
-                  transform: [{ scaleX: -1 }],
                 }}
                 resizeMode="contain"
               />
             </Animated.View>
-            {shield && <View style={[styles.playerShielded, { width: 160, height: 210 }]} pointerEvents="none" />}
+            {shield && <View style={[styles.playerShielded, { width: 140, height: 185 }]} pointerEvents="none" />}
           </View>
+          {/* Floaters anchored above the player sprite */}
           <View style={styles.floaterPAnchor} pointerEvents="none">
             {floaters.filter(f => f.side === 'p').map(f => (
               <Floater key={f.id} text={f.text} color={f.color} size={20} />
@@ -553,10 +552,39 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: COLORS.bgDark,
   },
+  // Stage now acts as a positioned container so the enemy/player can pin to opposite corners.
   stage: {
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 8,
+    position: 'relative',
+  },
+  // Enemy block — pinned TOP-LEFT (Pokemon-Emerald style).
+  enemyAnchor: {
+    position: 'absolute',
+    top: 0,
+    left: 8,
+    width: 220,
+    alignItems: 'flex-start',
+    zIndex: 5,
+  },
+  enemyNamePlate: {
+    backgroundColor: 'rgba(8, 14, 24, 0.85)',
+    borderWidth: 2,
+    borderColor: COLORS.borderHi,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 6,
+    minWidth: 200,
+  },
+  // Player block — pinned BOTTOM-RIGHT, sitting just above the bottom HUD.
+  playerAnchor: {
+    position: 'absolute',
+    right: 8,
+    bottom: 0,
+    alignItems: 'flex-end',
+    zIndex: 6,
   },
   enemyBox: { alignItems: 'center', minHeight: 240 },
   enemyHeaderRow: { flexDirection: 'row', alignItems: 'center' },
