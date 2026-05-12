@@ -19,6 +19,7 @@ import {
   CapturedMinion,
 } from '../src/systems/QuantumStorage';
 import { executeMinionSkill, getMinionSkillView } from '../src/systems/TamedCombat';
+import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicMinionRenderer';
 
 type ActionPanel = 'main' | 'skills' | 'items' | 'spikes' | 'minionDeploy' | 'minionSkills';
 
@@ -33,8 +34,15 @@ const { width: SW } = Dimensions.get('window');
 // encounters that don't go through the roamer system.
 function getEnemySpriteUri(
   bossFromRoute: boolean,
-  e: { isBoss?: boolean },
+  e: { id?: string; isBoss?: boolean },
 ): string {
+  // Dynamic sprite lookup: if the enemy's id matches one of the Quantum
+  // Minion species (phreak_1..mech_4), pull the matching sliced sprite
+  // from the backend sheet instead of the legacy 2-sprite fallback.
+  if (e?.id && hasMinionSprite(e.id)) {
+    const uri = resolveMinionSpriteUri(e.id);
+    if (uri) return uri;
+  }
   return (bossFromRoute || e.isBoss) ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
 }
 
@@ -589,6 +597,36 @@ export default function CombatScreen() {
             ))}
           </View>
         </Animated.View>
+
+        {/* ── Deployed minion sprite (Quantum Taming) ──────────────────────
+            Renders alongside the player whenever a minion is on the field.
+            Sprite is resolved dynamically via DynamicMinionRenderer using
+            the minion's speciesId, so it always matches the captured variant. */}
+        {deployedMinion && (() => {
+          const minionUri = resolveMinionSpriteUri(deployedMinion.speciesId, 0);
+          if (!minionUri) return null;
+          return (
+            <Animated.View style={styles.deployedMinionAnchor} pointerEvents="none">
+              <View style={styles.deployedMinionShadow} />
+              <Animated.View
+                style={{
+                  width: 100,
+                  height: 130,
+                  transform: [{ translateY: Math.sin(animTick * 0.45) * 2.5 }],
+                }}
+              >
+                <Image
+                  source={{ uri: minionUri }}
+                  style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
+                  resizeMode="contain"
+                />
+              </Animated.View>
+              <PixelText size={9} color={COLORS.neonMagenta} bold style={{ marginTop: 2, textAlign: 'center' }}>
+                {deployedMinion.name.toUpperCase()}
+              </PixelText>
+            </Animated.View>
+          );
+        })()}
       </View>
 
       {/* (3) PLAYER INFO PANEL — green-outlined stats card per layout spec
@@ -677,18 +715,29 @@ export default function CombatScreen() {
         {/* ── DEPLOY MINION picker ────────────────────────────────────── */}
         {panel === 'minionDeploy' && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
-            {(state.quantum?.party ?? []).map((m) => (
-              <TouchableOpacity
-                key={m.uid}
-                style={[styles.skillBtn, { borderColor: COLORS.neonYellow }]}
-                onPress={() => playerDeployMinion(m)}
-                testID={`combat-deploy-${m.uid}`}
-              >
-                <PixelText size={11} color={COLORS.neonYellow} bold>{m.name.toUpperCase()}</PixelText>
-                <PixelText size={9} color={COLORS.textDim}>Lv{m.level} · T{m.tier}</PixelText>
-                <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>ATK {m.atk} · {m.skills.length} skills</PixelText>
-              </TouchableOpacity>
-            ))}
+            {(state.quantum?.party ?? []).map((m) => {
+              // Dynamic sprite thumb so the player sees the exact captured variant.
+              const thumb = hasMinionSprite(m.speciesId) ? resolveMinionSpriteUri(m.speciesId) : null;
+              return (
+                <TouchableOpacity
+                  key={m.uid}
+                  style={[styles.skillBtn, { borderColor: COLORS.neonYellow, alignItems: 'center' }]}
+                  onPress={() => playerDeployMinion(m)}
+                  testID={`combat-deploy-${m.uid}`}
+                >
+                  {thumb ? (
+                    <Image
+                      source={{ uri: thumb }}
+                      style={{ width: 44, height: 44, marginBottom: 2 }}
+                      resizeMode="contain"
+                    />
+                  ) : null}
+                  <PixelText size={11} color={COLORS.neonYellow} bold>{m.name.toUpperCase()}</PixelText>
+                  <PixelText size={9} color={COLORS.textDim}>Lv{m.level} · T{m.tier}</PixelText>
+                  <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>ATK {m.atk} · {m.skills.length} skills</PixelText>
+                </TouchableOpacity>
+              );
+            })}
             {(state.quantum?.party ?? []).length === 0 && (
               <PixelText size={11} color={COLORS.textDim}>No minions in party. Quarantine some!</PixelText>
             )}
@@ -841,6 +890,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.9,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 0 },
+  },
+  // ── Deployed minion sprite anchor (Quantum Taming) ─────────────────
+  // Sits at bottom-left, between the diagonal player+enemy axis. Sprites
+  // already face the foe so no mirror flip is required.
+  deployedMinionAnchor: {
+    position: 'absolute',
+    bottom: 28,
+    left: '6%',
+    width: 110,
+    alignItems: 'center',
+    zIndex: 9,
+  },
+  deployedMinionShadow: {
+    position: 'absolute',
+    bottom: 0,
+    width: 78,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
   // Dark elliptical ground shadow under each enemy sprite
   groundShadow: {

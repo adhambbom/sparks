@@ -434,17 +434,38 @@ export const ENEMIES: Record<string, Enemy> = {
   glitch_final: { id: 'glitch_final', name: 'Final Form', spriteIndex: 24, hp: 450, atk: 34, def: 20, spd: 15, xp: 500, gold: 500, abilities: ['mind_control', 'overload', 'rocket_punch'], weakness: 'psi', tier: 4, isBoss: true, phaseAbilities: ['mind_control', 'overload', 'rocket_punch', 'rage_burst'], phaseQuote: 'TERMINATION SEQUENCE INITIATED.', drops: [{ itemId: 'rare_chip', chance: 1.0 }, { itemId: 'pulse_cannon', chance: 0.3 }, { itemId: 'glitch_plate', chance: 0.3 }] },
   // Add Tesla Drone (use Hover-Sentry sprite as drone-like visual)
   tesla_drone: { id: 'tesla_drone', name: 'Tesla Drone', spriteIndex: 15, hp: 60, atk: 18, def: 5, spd: 15, xp: 35, gold: 25, abilities: ['plasma_blade'], weakness: 'physical', tier: 2, drops: [{ itemId: 'energy_cell', chance: 0.6 }] },
+
+  // ── Quantum Minion species (dynamic sprite sheet) ────────────────────
+  // These 12 entries are wired to /api/static/sprites/quantum_minions via
+  // DynamicMinionRenderer.SPECIES_LINE_MAP. spriteIndex is irrelevant for
+  // them (the renderer checks hasMinionSprite() first and falls back to
+  // the legacy spriteIndex grid otherwise).
+  // ── Phreak line (Phone corruption) ───────────────────────────────────
+  phreak_1: { id: 'phreak_1', name: 'Glitch-Slate',     spriteIndex: 0, hp: 40,  atk: 10, def: 4,  spd: 12, xp: 22, gold: 14, abilities: ['hack'],         weakness: 'psi',     tier: 1, drops: [{ itemId: 'energy_cell', chance: 0.5 }] },
+  phreak_2: { id: 'phreak_2', name: 'Tentacle-Phone',   spriteIndex: 0, hp: 70,  atk: 14, def: 6,  spd: 11, xp: 36, gold: 24, abilities: ['hack'],         weakness: 'psi',     tier: 2, drops: [{ itemId: 'rare_chip', chance: 0.3 }] },
+  phreak_3: { id: 'phreak_3', name: 'Spider-Modem',     spriteIndex: 0, hp: 95,  atk: 18, def: 9,  spd: 9,  xp: 52, gold: 36, abilities: ['power_strike'], weakness: 'energy',  tier: 3, drops: [{ itemId: 'rare_chip', chance: 0.4 }] },
+  phreak_4: { id: 'phreak_4', name: 'Crawl-Phreak',     spriteIndex: 0, hp: 130, atk: 22, def: 12, spd: 10, xp: 78, gold: 56, abilities: ['mech_slam'],    weakness: 'cyber',   tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.5 }] },
+  // ── VR-Ghost line (Hacker → Summoner) ────────────────────────────────
+  vrghost_1: { id: 'vrghost_1', name: 'VR Initiate',    spriteIndex: 0, hp: 50,  atk: 9,  def: 3,  spd: 14, xp: 24, gold: 16, abilities: ['hack'],         weakness: 'physical', tier: 1, drops: [{ itemId: 'mp_potion', chance: 0.4 }] },
+  vrghost_2: { id: 'vrghost_2', name: 'VR Hacker',      spriteIndex: 0, hp: 75,  atk: 13, def: 5,  spd: 13, xp: 38, gold: 26, abilities: ['mind_blast'],   weakness: 'physical', tier: 2, drops: [{ itemId: 'mp_potion', chance: 0.5 }] },
+  vrghost_3: { id: 'vrghost_3', name: 'VR Beastmaster', spriteIndex: 0, hp: 100, atk: 17, def: 7,  spd: 12, xp: 54, gold: 38, abilities: ['mind_blast'],   weakness: 'physical', tier: 3, drops: [{ itemId: 'rare_chip', chance: 0.4 }] },
+  vrghost_4: { id: 'vrghost_4', name: 'Ghost-Summoner', spriteIndex: 0, hp: 140, atk: 23, def: 9,  spd: 13, xp: 82, gold: 60, abilities: ['mind_blast', 'rage_burst'], weakness: 'psi', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.6 }] },
+  // ── Mech line (Cyborg → Bio-Mech) ────────────────────────────────────
+  mech_1: { id: 'mech_1', name: 'Augmented Operator', spriteIndex: 0, hp: 60,  atk: 11, def: 6,  spd: 9,  xp: 28, gold: 18, abilities: ['power_strike'], weakness: 'cyber',   tier: 1, drops: [{ itemId: 'health_pack', chance: 0.5 }] },
+  mech_2: { id: 'mech_2', name: 'Plasma Gunner',      spriteIndex: 0, hp: 90,  atk: 16, def: 8,  spd: 8,  xp: 42, gold: 28, abilities: ['plasma_blade'], weakness: 'cyber',   tier: 2, drops: [{ itemId: 'energy_cell', chance: 0.6 }] },
+  mech_3: { id: 'mech_3', name: 'Bio-Mech Marauder',  spriteIndex: 0, hp: 120, atk: 20, def: 11, spd: 8,  xp: 60, gold: 42, abilities: ['mech_slam'],    weakness: 'cyber',   tier: 3, drops: [{ itemId: 'rare_chip', chance: 0.4 }] },
+  mech_4: { id: 'mech_4', name: 'Spider-Husk',        spriteIndex: 0, hp: 160, atk: 26, def: 14, spd: 7,  xp: 95, gold: 70, abilities: ['rage_burst', 'mech_slam'], weakness: 'cyber', tier: 4, drops: [{ itemId: 'rare_chip', chance: 0.6 }] },
 };
 
 export const ENEMIES_LIST = Object.values(ENEMIES);
 
 // Random encounter pools by zone
 export const ENCOUNTER_POOLS = {
-  academy: ['spider_bot', 'tinkerer_drone', 'tesla_drone'],
-  arena_t1: ['spider_bot', 'gear_golem', 'clockwork_beast', 'bio_lizard'],
-  arena_t2: ['tentacle_mech', 'plasma_brain', 'scrap_collector', 'generator_kin', 'neuro_crab'],
-  arena_t3: ['laser_wasp', 'crawler_chimaera', 'steam_mutant', 'multi_gynoid', 'armored_centipede'],
-  arena_t4: ['hover_sentry', 'piston_ogre', 'spike_mutant', 'bio_serpent', 'data_ghost'],
+  academy: ['spider_bot', 'tinkerer_drone', 'tesla_drone', 'phreak_1', 'vrghost_1'],
+  arena_t1: ['spider_bot', 'gear_golem', 'clockwork_beast', 'bio_lizard', 'phreak_1', 'mech_1'],
+  arena_t2: ['tentacle_mech', 'plasma_brain', 'scrap_collector', 'generator_kin', 'neuro_crab', 'phreak_2', 'vrghost_2', 'mech_2'],
+  arena_t3: ['laser_wasp', 'crawler_chimaera', 'steam_mutant', 'multi_gynoid', 'armored_centipede', 'phreak_3', 'vrghost_3', 'mech_3'],
+  arena_t4: ['hover_sentry', 'piston_ogre', 'spike_mutant', 'bio_serpent', 'data_ghost', 'phreak_4', 'vrghost_4', 'mech_4'],
   arena_boss: ['mutant_assembler', 'core_keeper', 'crawler_fly', 'glitch_avatar', 'glitch_final'],
 };
 
