@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const automationBypass = useCallback(async () => {
     try {
       // eslint-disable-next-line no-console
-      console.log('[auth] injecting automation bypass session…');
+      if (__DEV__) console.log('[auth] injecting automation bypass session…');
       const { data } = await api.post('/auth/automation-bypass');
       if (data?.access_token) {
         await AsyncStorage.setItem('access_token', data.access_token);
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return data;
     } catch (e) {
       // eslint-disable-next-line no-console
-      console.warn('[auth] automation bypass failed', e);
+      if (__DEV__) console.warn('[auth] automation bypass failed', e);
       return null;
     }
   }, []);

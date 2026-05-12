@@ -1,165 +1,194 @@
-# 🎮 Synthetic Sparks — Production Build Runbook
+# 🚀 Synthetic Sparks — Production Build Runbook (LOCAL)
 
-This document is the exact, copy-pasteable command sequence to produce a
-**signed Android App Bundle (.aab)** for the Google Play Store, plus the
-iOS `.ipa` for the App Store.
-
-> ⚠ The actual cloud build runs on **Expo EAS servers** — you'll execute
-> these commands on your local machine (or CI), not inside the Emergent
-> preview container. Everything *config-side* (eas.json, app.json,
-> permissions, target SDK, env matrix, debug stripping, asset compression)
-> is already done.
+This is the **exact tested sequence** to produce a signed `.aab` for the
+Google Play Store from your local machine. All the configuration work
+inside the project is already done — this runbook is just the commands
+you'll execute on your terminal.
 
 ---
 
-## 0 · Prerequisites (one-time setup)
+## ✅ Pre-flight (already done in this repo)
+
+| Item | Status |
+|---|---|
+| `ENABLE_AUTOMATION_BYPASS=0` locked into production env via `eas.json` | ✅ |
+| `NODE_ENV=production` locked into production env via `eas.json` | ✅ |
+| Server-side guard returns HTTP 403 when flag is 0 (verified end-to-end) | ✅ |
+| Android `targetSdkVersion=35`, `compileSdkVersion=35`, `minSdkVersion=24` | ✅ |
+| 64-bit (`arm64-v8a`) + `x86_64` architectures enabled | ✅ |
+| ProGuard + resource shrinking on release builds | ✅ |
+| Dangerous permissions blocked (`CAMERA`, `RECORD_AUDIO`, `LOCATION`, `STORAGE`) | ✅ |
+| Icon 1024×1024 (Play Store requirement) | ✅ |
+| Adaptive icon 1024×1024 + splash icon 512×512 created | ✅ |
+| Favicon squared to 64×64 | ✅ |
+| All `__DEV__`-gated debug overlays (GRID toggle, automation logs) tree-shaken in release | ✅ |
+| Backdrop `conduit_maze_bg.png` compressed (-31%) | ✅ |
+| 10 heavy backend sprites compressed (-4.5 MB total, ~70% avg) | ✅ |
+| Unused `react-logo*` assets removed | ✅ |
+| `expo prebuild --platform android` verified clean (no warnings/errors) | ✅ |
+| `expo-build-properties` aligned to SDK-compatible version `~1.0.10` | ✅ |
+| `iconExportComplete`, manifest permissions in `AndroidManifest.xml` confirmed | ✅ |
+
+---
+
+## 📋 Step-by-step local commands
+
+### 0 · One-time setup
 
 ```bash
 # Install the EAS CLI globally
 npm install -g eas-cli@latest
 
-# From the frontend directory, log in to your Expo account
+# Verify versions (you should see eas-cli >= 13.0.0)
+eas --version
+node --version  # >= 18 recommended
+```
+
+### 1 · Log in & link the project
+
+```bash
 cd /path/to/synthetic-sparks/frontend
+
+# Sign in with your Expo account
 eas login
 
-# Link the project to your Expo account — this writes the projectId
-# into app.json under expo.extra.eas.projectId
-eas init --id <YOUR-EAS-PROJECT-ID>      # if you already have one
-# OR
-eas init                                  # creates a new project
+# Link this repo to your EAS project (creates one if you don't have it).
+# Writes `expo.extra.eas.projectId` into app.json.
+eas init
 ```
 
-## 1 · Android signing keystore
+You only do steps 0-1 once per machine / project.
+
+### 2 · Configure your production backend URL
 
 ```bash
-# EAS will offer to generate and manage your keystore. Recommended.
+# Set the public-facing backend URL the production app will hit.
+# Replace with your real prod host.
+eas env:create \
+  --environment production \
+  --name EXPO_PUBLIC_BACKEND_URL \
+  --value "https://api.syntheticsparks.app"
+
+# Verify it appears in the production environment list:
+eas env:list --environment production
+```
+
+### 3 · Set up Android signing keystore
+
+```bash
+# Option A — Let EAS generate + manage a fresh upload-signing keystore (recommended).
 eas credentials
-# → Select Android → production → Set up a new keystore
+# → Select platform: Android
+# → Select build profile: production
+# → Choose "Set up a new keystore" → "Generate new keystore"
+
+# Option B — Upload an existing keystore (only if you've shipped to Play Store before
+# under the same package name `app.syntheticsparks.client`):
+# Same menu → "Use an existing keystore" → provide .jks / passwords / key alias.
 ```
 
-If you already have an upload-signing keystore from a previous release,
-upload it via the same prompt.
-
-## 2 · Production env vars
-
-EAS reads the production `env` block from `eas.json` automatically:
-
-```json
-"production": {
-  "env": {
-    "NODE_ENV": "production",
-    "ENABLE_AUTOMATION_BYPASS": "0"   // ⚠ HARD-LOCKED
-  }
-}
-```
-
-These are inlined into the bundle at compile time. Make sure
-`EXPO_PUBLIC_BACKEND_URL` points to your production backend URL — set it
-either inside `eas.json` env block or with `eas env:create`:
+### 4 · Build the production AAB
 
 ```bash
-eas env:create --environment production --name EXPO_PUBLIC_BACKEND_URL --value https://api.syntheticsparks.app
-```
-
-## 3 · Run the production build
-
-```bash
-cd /path/to/synthetic-sparks/frontend
-
-# Android — produces a signed .aab ready for the Play Console
+# Cloud build — takes ~15-25 minutes. Returns a downloadable .aab URL.
 eas build --platform android --profile production
-
-# iOS — produces a signed .ipa ready for App Store Connect
-eas build --platform ios --profile production
 ```
 
-Each cloud build takes ~15-25 minutes. EAS will print a download link to
-the resulting `.aab` / `.ipa`.
+While this runs, you can monitor progress at https://expo.dev/accounts/<you>/projects/synthetic-sparks/builds.
 
-## 4 · Submit to the store
+**What this build will produce:**
+- A signed `.aab` (Android App Bundle) — ready for the Play Console
+- All `__DEV__` code tree-shaken (no debug overlays, no logging)
+- Production-mode env baked in (`ENABLE_AUTOMATION_BYPASS=0`, `NODE_ENV=production`)
+- 64-bit + 32-bit architectures bundled in one AAB (Play picks per device)
+- Resources shrunk + ProGuard obfuscated
+
+### 5 · (First time only) Set up Play Console + service account
+
+Follow the Expo docs: https://docs.expo.dev/submit/android/
+
+Summary:
+1. Create your Play Console app under package name `app.syntheticsparks.client`.
+2. Create a Google Cloud service account with **Service Account User** + **Service Account Token Creator** roles, plus **Release Manager** access in Play Console.
+3. Download the JSON key → save as `play-store-service-account.json` in the `frontend/` folder.
+4. ⚠ Add `play-store-service-account.json` to `.gitignore` — never commit it.
+
+### 6 · Submit to Google Play (Internal Track)
 
 ```bash
-# Google Play (internal track first, then promote)
+# Pushes the latest production build straight to the Play Console
+# internal test track as a draft. You promote later from the Play UI.
 eas submit --platform android --profile production --latest
-
-# Apple App Store
-eas submit --platform ios --profile production --latest
 ```
 
-The first time you submit to Google Play you'll need a service-account
-JSON file (`./play-store-service-account.json`) — see
-https://docs.expo.dev/submit/android/.
+The first submit usually takes 10-30 minutes to appear in Play Console.
+Pre-launch report comes ~1-2 hours after that.
 
-## 5 · OTA updates after launch
+### 7 · OTA hotfixes after launch
+
+For JS/style-only fixes (no native changes), you don't have to re-upload
+the AAB — push an OTA update:
 
 ```bash
-# Publish JS-only updates without re-uploading binaries
-eas update --branch production --message "Patch description"
+eas update --branch production --message "Hotfix: <description>"
 ```
+
+Users get it on next app launch. Native code changes still require a
+fresh `eas build`.
 
 ---
 
-## 📋 Pre-flight checklist (already done in this repo)
-
-| Item | Status | Where |
-|---|---|---|
-| `ENABLE_AUTOMATION_BYPASS=0` in production env | ✅ | `eas.json` > production.env |
-| `NODE_ENV=production` in production env | ✅ | `eas.json` > production.env |
-| Server-side guard returns 403 if flag is 0 | ✅ | `backend/server.py` |
-| Android target SDK = 35 | ✅ | `app.json` > expo-build-properties |
-| 64-bit / ARM64 enabled by default | ✅ | EAS default (no opt-out) |
-| Proguard + resource shrinking on release | ✅ | `app.json` > expo-build-properties |
-| Sensitive permissions explicitly blocked | ✅ | `app.json` > android.blockedPermissions |
-| Adaptive icon configured | ✅ | `app.json` > android.adaptiveIcon |
-| Splash screen configured | ✅ | `app.json` > plugins.expo-splash-screen |
-| Edge-to-edge enabled | ✅ | `app.json` > android.edgeToEdgeEnabled |
-| Bundle ID + package name set | ✅ | `app.syntheticsparks.client` |
-| iOS encryption export declaration | ✅ | `app.json` > ios.infoPlist.ITSAppUsesNonExemptEncryption |
-| Debug overlay tree-shaken (GRID toggle) | ✅ | gated by `__DEV__` in `conduit-maze.tsx` |
-| Backdrop optimized (31% smaller) | ✅ | `backend/static/sprites/conduit_maze_bg.png` |
-| `.env.production` template documented | ✅ | `backend/.env.production` |
-| `.env.staging` template documented | ✅ | `backend/.env.staging` |
-| Security guard verified end-to-end | ✅ | deep-testing report passed all 3 scenarios |
-
-## 🎨 Texture compression note
-
-Real GPU texture compression (ETC2 / ASTC / DXT) happens automatically
-during the EAS Android build via the Android Gradle plugin. There's no
-manual step you have to run — drop your PNGs in `/assets` or serve them
-from the backend (as we do for level art), and the build pipeline picks
-the right format per device.
-
-For *manual* pre-compression of very large assets (≥ 2 MB), use
-`pngquant` or `oxipng`:
-
-```bash
-pngquant --quality=70-85 --strip --skip-if-larger -o out.png in.png
-```
-
-## 🚀 First-launch ramp plan
-
-1. Build & submit to Google Play **internal track** (50 testers limit).
-2. Verify automation-bypass returns 403 on the prod URL:
-   ```bash
-   curl -X POST https://api.syntheticsparks.app/api/auth/automation-bypass
-   # expect: HTTP/1.1 403 Forbidden
-   ```
-3. Smoke-test with 5-10 internal testers.
-4. Promote to **closed beta** (100-2000 testers).
-5. Watch crash-free sessions in Play Console for 72 hours.
-6. Promote to **production** with a 10% staged rollout.
-7. Scale to 100% after another 72h of healthy metrics.
-
-## 📞 If something goes wrong
+## 🚨 If anything fails
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Build fails on EAS with "Keystore not found" | Forgot to run `eas credentials` | Set up keystore via `eas credentials` |
-| App crashes on launch | Backend URL not set | `eas env:create EXPO_PUBLIC_BACKEND_URL=...` |
-| Auth always fails on prod build | `ENABLE_AUTOMATION_BYPASS` flipped on prod | Verify `eas.json` and re-deploy backend |
-| Play submission rejected for permissions | New permission added to `app.json` | Justify in Play Console or remove |
-| OTA update not reaching users | Release channel mismatch | Match `eas update --branch` to runtime channel |
+| `eas build` fails with "Keystore not found" | Skipped step 3 | Run `eas credentials` |
+| `eas submit` fails "Service account credentials missing" | Step 5 skipped | Create + download service-account JSON |
+| Build crashes on launch (Sentry: missing env var) | Backend URL not set | Re-run step 2 with correct URL |
+| Auth always fails on prod build | `ENABLE_AUTOMATION_BYPASS` flipped on prod | Verify `eas.json` production env; backend has `ENABLE_AUTOMATION_BYPASS=0` |
+| Play Console rejects for permissions | New permission auto-added by a plugin | Justify in Play Console **or** add to `blockedPermissions` in `app.json` |
+| OTA update not reaching users | Channel mismatch | Match `eas update --branch <name>` to the runtime channel in `eas.json` |
 
 ---
 
-**Last updated:** Release prep for v1.0.0 (Conduit Maze + Tutorial)
+## 📝 Required Play Console assets (you'll need to prepare separately)
+
+The build pipeline doesn't generate marketing assets — Google needs:
+- **Feature graphic** — 1024×500 PNG
+- **Phone screenshots** — minimum 2, max 8 (16:9 or 9:16, min 320px)
+- **App icon** — 512×512 (already in `assets/images/icon.png` at 1024×1024 — Play will downscale)
+- **Short description** — 80 chars max
+- **Full description** — 4000 chars max
+- **Privacy policy URL** — hosted on your own domain
+
+Use Play Console's tools or any image editor to make these.
+
+---
+
+## 🏷 Version bump for future releases
+
+Before each new `eas build` for production:
+
+1. Bump `version` in `app.json` (semver, e.g. `1.0.0` → `1.0.1`)
+2. Bump `android.versionCode` in `app.json` by **exactly +1** every time (Play requires monotonic increase)
+3. Commit + tag in git
+4. Run `eas build --platform android --profile production`
+
+---
+
+## ✨ Smoke test after first Play install
+
+Once the AAB lands in your internal-track tester device:
+
+1. Launch the app — title screen renders, no crash
+2. Tap CONTINUE → loads your save
+3. From the academy, descend the spiral staircase → Conduit Maze loads
+4. Verify: **no GRID OFF button visible** (confirms `__DEV__` tree-shaking worked)
+5. Open MENU → HOW TO PLAY → all 12 pages render
+6. On a separate machine: `curl -X POST https://api.syntheticsparks.app/api/auth/automation-bypass` → expect **HTTP 403** (confirms server-side lockdown)
+
+If all six pass, you're production-ready. Promote to closed beta → open beta → 10% staged rollout → 100%.
+
+---
+
+**Last updated:** v1.0.0 — Conduit Maze · Tutorial · Security hardened

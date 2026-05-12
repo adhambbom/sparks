@@ -64,7 +64,7 @@ export function detectAutomation(): AutomationFlags {
   _cache = readAutomationFlagsWeb();
   if (_cache.enabled) {
     // eslint-disable-next-line no-console
-    console.log('[automation] PLAYWRIGHT DETECTED — bypassing login flow', _cache);
+    if (__DEV__) console.log('[automation] PLAYWRIGHT DETECTED — bypassing login flow', _cache);
   }
   return _cache;
 }

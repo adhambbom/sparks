@@ -40,7 +40,7 @@ export default function TitleScreen() {
     if (!user) return;
     const target = automationRedirect || '/conduit-maze';
     // eslint-disable-next-line no-console
-    console.log('[automation] redirecting to', target);
+    if (__DEV__) console.log('[automation] redirecting to', target);
     router.replace(target as any);
   }, [loading, automation, user, automationRedirect]);
 
