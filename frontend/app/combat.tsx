@@ -376,8 +376,10 @@ export default function CombatScreen() {
       setFirewallTurns(result.statusTurns);
       pushLog('Firewall raised! DEF +50% for 2 turns.');
     }
-    // Minion is consumed for this battle after one use (balance).
-    setDeployedMinion(null);
+    // The minion STAYS DEPLOYED across turns (matches the viewport-swap
+    // mockup behaviour). Player presses ✕ RECALL on the skills panel to
+    // bring the trainer back out, or the minion is auto-recalled on KO /
+    // battle end. We only reset the active sub-panel here.
     setPanel('main');
     setTimeout(() => endPlayerTurn(), 280);
   };
@@ -565,21 +567,34 @@ export default function CombatScreen() {
           </View>
         </Animated.View>
 
-        {/* ── Player ADHAMB: BOTTOM-RIGHT corner, faces LEFT toward enemy ── */}
+        {/* ── BATTLE VIEWPORT SLOT (bottom-right) ──────────────────────────
+            By design this slot is a "viewport" — it shows the PLAYER by
+            default, but when a minion is deployed the slot is hijacked to
+            render the active minion's sprite, mirroring the C# blueprint's
+            `ActiveBattleViewport.SwitchViewportToMinion` behaviour. The
+            player's HP bar moves to a smaller pill in the deploy header so
+            the player is never invisible — just "off-field". */}
         <Animated.View style={[styles.playerAnchor, { transform: [{ translateX: playerShake }], zIndex: 10 }]}>
           <View style={styles.playerSprite}>
             <View style={styles.playerGroundShadow} pointerEvents="none" />
             <Animated.View
               style={{
-                width: 130,
-                height: 175,
+                // When a minion is deployed we slightly enlarge the slot so
+                // the captured creature reads as the new active fighter.
+                width: deployedMinion ? 150 : 130,
+                height: deployedMinion ? 180 : 175,
                 transform: [{ translateY: Math.sin(animTick * 0.35 + Math.PI) * 2.5 }],
                 zIndex: 10,
               }}
             >
-              {/* No mirror flip — sprite faces LEFT toward the enemy on top-left. */}
+              {/* Dynamic source: minion sprite if deployed, otherwise the player.
+                  `resolveMinionSpriteUri` falls back to null if speciesId
+                  isn't in SPECIES_LINE_MAP, so we fall through to the player. */}
               <Image
-                source={{ uri: SPRITE_ASSETS.player }}
+                source={{
+                  uri: (deployedMinion && resolveMinionSpriteUri(deployedMinion.speciesId)) ||
+                       SPRITE_ASSETS.player,
+                }}
                 style={{
                   width: '100%',
                   height: '100%',
@@ -590,64 +605,72 @@ export default function CombatScreen() {
             </Animated.View>
             {shield && <View style={[styles.playerShielded, { width: 140, height: 185 }]} pointerEvents="none" />}
           </View>
-          {/* Floaters anchored above the player sprite */}
+          {/* Floaters anchored above the slot (player OR minion). */}
           <View style={styles.floaterPAnchor} pointerEvents="none">
             {floaters.filter(f => f.side === 'p').map(f => (
               <Floater key={f.id} text={f.text} color={f.color} size={20} />
             ))}
           </View>
         </Animated.View>
-
-        {/* ── Deployed minion sprite (Quantum Taming) ──────────────────────
-            Renders alongside the player whenever a minion is on the field.
-            Sprite is resolved dynamically via DynamicMinionRenderer using
-            the minion's speciesId, so it always matches the captured variant. */}
-        {deployedMinion && (() => {
-          const minionUri = resolveMinionSpriteUri(deployedMinion.speciesId, 0);
-          if (!minionUri) return null;
-          return (
-            <Animated.View style={styles.deployedMinionAnchor} pointerEvents="none">
-              <View style={styles.deployedMinionShadow} />
-              <Animated.View
-                style={{
-                  width: 100,
-                  height: 130,
-                  transform: [{ translateY: Math.sin(animTick * 0.45) * 2.5 }],
-                }}
-              >
-                <Image
-                  source={{ uri: minionUri }}
-                  style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
-                  resizeMode="contain"
-                />
-              </Animated.View>
-              <PixelText size={9} color={COLORS.neonMagenta} bold style={{ marginTop: 2, textAlign: 'center' }}>
-                {deployedMinion.name.toUpperCase()}
-              </PixelText>
-            </Animated.View>
-          );
-        })()}
       </View>
 
-      {/* (3) PLAYER INFO PANEL — green-outlined stats card per layout spec
-              + (4) ACTION MENU (2×2 grid) directly underneath. */}
+      {/* (3) BOTTOM PANEL — switches between player stats and "DEPLOYED MINION"
+              view per the ActiveBattleViewport blueprint. The player card is
+              fully replaced when a minion is on the field so the player
+              clearly understands the swap.
+              + (4) ACTION MENU directly underneath. */}
       <View style={styles.bottomHud}>
-        <View style={styles.playerInfoPanel}>
-          <View style={styles.statRow}>
-            <View style={{ flex: 1 }}>
-              <PixelText size={11} color={COLORS.neonGreen} bold>{player.name.toUpperCase()} · LV {player.level}</PixelText>
-              <View style={{ height: 4 }} />
-              <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={150} height={9} />
-              <View style={{ height: 4 }} />
-              <StatBar value={player.mp} max={player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={150} height={9} />
-            </View>
-            <View style={styles.statusIcons}>
-              {shield && <PixelText size={10} color={COLORS.neonCyan} bold>◇SHIELD</PixelText>}
-              {haste && <PixelText size={10} color={COLORS.neonMagenta} bold>»HASTE</PixelText>}
-              {enemyBurn > 0 && <PixelText size={10} color="#ff8000" bold>🔥{enemyBurn}</PixelText>}
+        {deployedMinion ? (
+          // ── DEPLOYED-MINION HEADER (matches uploaded UI mockup) ──────────
+          // Left col  → OMNI-REGISTRY + species line label (e.g. "Phreak").
+          // Right col → DEPLOYED MINION + minion name (yellow accent).
+          //             Mini HP/MP bars retained for the off-field player so
+          //             they can still gauge their resources at a glance.
+          <View style={[styles.playerInfoPanel, { borderColor: COLORS.neonYellow }]}>
+            <View style={styles.deployHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <PixelText size={11} color={COLORS.neonCyan} bold>OMNI-REGISTRY</PixelText>
+                <PixelText size={11} color={COLORS.neonCyan}>
+                  {(deployedMinion.speciesId.split('_')[0] || 'minion').toUpperCase()}
+                </PixelText>
+                <View style={{ height: 4 }} />
+                {/* Off-field player resources (smaller bars) */}
+                <PixelText size={8} color={COLORS.textDim}>
+                  TRAINER {player.name.toUpperCase()} (RESERVE)
+                </PixelText>
+                <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={120} height={6} />
+                <View style={{ height: 2 }} />
+                <StatBar value={player.mp} max={player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={120} height={6} />
+              </View>
+              <View style={{ flex: 1, paddingLeft: 8, borderLeftWidth: 2, borderColor: COLORS.border }}>
+                <PixelText size={11} color={COLORS.neonYellow} bold>DEPLOYED</PixelText>
+                <PixelText size={11} color={COLORS.neonYellow} bold>MINION:</PixelText>
+                <View style={{ height: 4 }} />
+                <PixelText size={11} color={COLORS.neonMagenta} bold>{deployedMinion.name.toUpperCase()}</PixelText>
+                <PixelText size={9} color={COLORS.textDim}>
+                  Lv{deployedMinion.level} · ATK {deployedMinion.atk} · DEF {deployedMinion.def}
+                </PixelText>
+              </View>
             </View>
           </View>
-        </View>
+        ) : (
+          <View style={styles.playerInfoPanel}>
+            <View style={styles.statRow}>
+              <View style={{ flex: 1 }}>
+                <PixelText size={11} color={COLORS.neonGreen} bold>{player.name.toUpperCase()} · LV {player.level}</PixelText>
+                <View style={{ height: 4 }} />
+                <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={150} height={9} />
+                <View style={{ height: 4 }} />
+                <StatBar value={player.mp} max={player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={150} height={9} />
+              </View>
+              <View style={styles.statusIcons}>
+                {shield && <PixelText size={10} color={COLORS.neonCyan} bold>◇SHIELD</PixelText>}
+                {haste && <PixelText size={10} color={COLORS.neonMagenta} bold>»HASTE</PixelText>}
+                {enemyBurn > 0 && <PixelText size={10} color="#ff8000" bold>🔥{enemyBurn}</PixelText>}
+              </View>
+            </View>
+          </View>
+        )}
 
         {turn === 'player' && !busy && panel === 'main' && (
           <View style={styles.actionGrid}>
@@ -672,8 +695,8 @@ export default function CombatScreen() {
             </View>
             <View style={styles.actionCell}>
               <PixelButton
-                title="CALL"
-                onPress={() => setPanel('minionDeploy')}
+                title={deployedMinion ? 'MINION' : 'CALL'}
+                onPress={() => setPanel(deployedMinion ? 'minionSkills' : 'minionDeploy')}
                 color={COLORS.neonYellow}
                 testID="combat-call"
                 full
@@ -891,24 +914,12 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 0 },
   },
-  // ── Deployed minion sprite anchor (Quantum Taming) ─────────────────
-  // Sits at bottom-left, between the diagonal player+enemy axis. Sprites
-  // already face the foe so no mirror flip is required.
-  deployedMinionAnchor: {
-    position: 'absolute',
-    bottom: 28,
-    left: '6%',
-    width: 110,
-    alignItems: 'center',
-    zIndex: 9,
-  },
-  deployedMinionShadow: {
-    position: 'absolute',
-    bottom: 0,
-    width: 78,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  // ── Deploy-mode bottom panel: two-column header per the
+  //     ActiveBattleViewport mockup ("OMNI-REGISTRY" | "DEPLOYED MINION:").
+  deployHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
   },
   // Dark elliptical ground shadow under each enemy sprite
   groundShadow: {
