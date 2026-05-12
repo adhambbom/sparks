@@ -43,6 +43,7 @@ import { ActionButton } from '../src/components/ActionButton';
 import { StatBar } from '../src/components/StatBar';
 import SheetSprite from '../src/components/SheetSprite';
 import { useGame } from '../src/contexts/GameContext';
+import { useTutorial } from '../src/contexts/TutorialContext';
 import { sfx } from '../src/utils/audio';
 import {
   makeAIRoamer,
@@ -101,6 +102,7 @@ function pickSpawnTiles(
 
 export default function ConduitMazeScreen() {
   const { state, applyDamage, addGold, awardXp, applyHeal } = useGame() as any;
+  const { startSequence, isCompleted } = useTutorial();
   const { width: SW, height: SH } = Dimensions.get('window');
 
   // Compute tile size for the HANDHELD-STYLE tight camera viewport.
@@ -171,7 +173,11 @@ export default function ConduitMazeScreen() {
     });
     setRoamers(created);
     const initToast = setTimeout(() => setHint(''), 2400);
-    return () => clearTimeout(initToast);
+    // ▶ Auto-fire the Conduit Maze stealth tutorial on first descent.
+    const tutorTimer = setTimeout(() => {
+      if (!isCompleted('conduit')) startSequence('conduit');
+    }, 900);
+    return () => { clearTimeout(initToast); clearTimeout(tutorTimer); };
   }, []);
 
   // ── Player movement ──────────────────────────────────────

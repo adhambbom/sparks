@@ -8,6 +8,7 @@ import { PixelButton } from '../src/components/PixelButton';
 import { StatBar } from '../src/components/StatBar';
 import Floater from '../src/components/Floater';
 import { useGame } from '../src/contexts/GameContext';
+import { useTutorial } from '../src/contexts/TutorialContext';
 import { sfx } from '../src/utils/audio';
 // ── Quantum Taming (modular extension) ────────────────────────────────
 // These modules attach capture + minion-deploy behaviour without altering
@@ -68,6 +69,15 @@ export default function CombatScreen() {
   // the Juggernaut sprite to match what was rendered in the castle screen.
   const bossFromRoute = params.boss === '1' || params.mode === 'boss';
   const { state, applyDamage, applyHeal, applyMpCost, awardXp, addGold, addItem, removeItem, saveToServer, addCapturedMinion, markSpeciesSeen } = useGame();
+  const { startSequence, isCompleted } = useTutorial();
+  // ▶ Auto-fire the combat protocol tutorial on the first encounter.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!isCompleted('combat')) startSequence('combat');
+    }, 600);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [enemyId] = useState<string>(params.enemyId || 'spider_bot');
   const enemyData = ENEMIES[enemyId];
   // Unified boss flag — true if either the data-file marks this enemy as a

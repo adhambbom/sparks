@@ -17,6 +17,7 @@ import { Sprite } from '../src/components/Sprite';
 import { ActiveSkillPanel } from '../src/components/ActiveSkillPanel';
 import { useGame } from '../src/contexts/GameContext';
 import { useAuth } from '../src/contexts/AuthContext';
+import { useTutorial } from '../src/contexts/TutorialContext';
 import { sfx } from '../src/utils/audio';
 import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicMinionRenderer';
 import { stepWildAI, makeAIRoamer, AIRoamer, AI_CONFIG } from '../src/systems/WildMinionAI';
@@ -133,6 +134,7 @@ function randomFloorTile(avoidX: number, avoidY: number, occupied: Set<string>):
 export default function GameScreen() {
   const { user, loading: authLoading } = useAuth();
   const { state, setState, loadFromServer, setPosition, saveCheckpoint, applyHeal, applyDamage, addItem, addGold } = useGame();
+  const { startSequence, isCompleted } = useTutorial();
   const [loaded, setLoaded] = useState(false);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [pauseOpen, setPauseOpen] = useState(false);
@@ -240,6 +242,13 @@ export default function GameScreen() {
       setRoamers(placed);
       engagingRef.current = false;
       setLoaded(true);
+      // ▶ Auto-trigger the welcome walkthrough on first entry to the academy.
+      // The Tutorial context will silently no-op if the player has already
+      // completed it. The tiny delay lets the world render so the dim
+      // overlay highlights look anchored.
+      setTimeout(() => {
+        if (!isCompleted('intro')) startSequence('intro');
+      }, 700);
     })();
   }, [user]);
 
@@ -1090,6 +1099,8 @@ export default function GameScreen() {
             <PixelButton title="INVENTORY" onPress={() => { setPauseOpen(false); router.push('/inventory'); }} color={COLORS.neonCyan} full />
             <View style={{ height: 8 }} />
             <PixelButton title="QUANTUM REGISTRY" onPress={() => { setPauseOpen(false); router.push('/registry'); }} color={COLORS.neonYellow} full />
+            <View style={{ height: 8 }} />
+            <PixelButton title="HOW TO PLAY" onPress={() => { setPauseOpen(false); router.push('/how-to-play'); }} color={COLORS.neonCyan} full />
             <View style={{ height: 8 }} />
             <PixelButton title="SAVE CHECKPOINT" onPress={handleSave} color={COLORS.neonYellow} full />
             <View style={{ height: 8 }} />

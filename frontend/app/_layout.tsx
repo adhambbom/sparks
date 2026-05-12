@@ -6,6 +6,8 @@ import { View, ActivityIndicator } from 'react-native';
 import { useFonts, PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { GameProvider } from '../src/contexts/GameContext';
+import { TutorialProvider } from '../src/contexts/TutorialContext';
+import { TutorialOverlay } from '../src/components/TutorialOverlay';
 import { ensureAudioMode } from '../src/utils/audio';
 
 export default function RootLayout() {
@@ -31,15 +33,19 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <GameProvider>
-          <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: '#0a0a14' },
-              animation: 'fade',
-              animationDuration: 120,   // 0.12s — near-instant overworld→combat fade
-            }}
-          />
+          <TutorialProvider>
+            <StatusBar style="light" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: '#0a0a14' },
+                animation: 'fade',
+                animationDuration: 120,   // 0.12s — near-instant overworld→combat fade
+              }}
+            />
+            {/* Global tutorial overlay — rendered above every screen via Modal. */}
+            <TutorialOverlay />
+          </TutorialProvider>
         </GameProvider>
       </AuthProvider>
     </SafeAreaProvider>
