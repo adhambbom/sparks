@@ -395,8 +395,12 @@ export default function CombatScreen() {
     // The minion STAYS DEPLOYED across turns (matches the viewport-swap
     // mockup behaviour). Player presses ✕ RECALL on the skills panel to
     // bring the trainer back out, or the minion is auto-recalled on KO /
-    // battle end. We only reset the active sub-panel here.
-    setPanel('main');
+    // battle end.
+    //
+    // We INTENTIONALLY do NOT setPanel('main') here — keeping the cyborg
+    // panel up means the next move is one tap away once the enemy turn ends.
+    // The grid cells are visually disabled during `busy` so the player gets
+    // clear feedback (see cyborgMoveCell render).
     setTimeout(() => endPlayerTurn(), 280);
   };
 
@@ -815,26 +819,31 @@ export default function CombatScreen() {
                       const sId = allSlots[idx];
                       const sk = getMinionSkillView(sId);
                       const locked = !known.has(sId) || !sk;
+                      // Disable taps while an action is animating so the player
+                      // can clearly see they should wait — the cell stays in
+                      // place between turns so the next move is one tap away
+                      // the instant the enemy turn ends.
+                      const waitingForTurn = busy || turn !== 'player';
+                      const interactable = !locked && !waitingForTurn;
                       return (
                         <TouchableOpacity
                           key={sId}
-                          disabled={locked}
+                          disabled={!interactable}
                           onPress={() => sk && playerMinionSkill(sk.id)}
                           style={[
                             styles.cyborgMoveCell,
-                            // Inner borders for the segmented HUD look.
                             colIdx === 0 && styles.cyborgMoveCellRightBorder,
                             rowIdx === 0 && styles.cyborgMoveCellBottomBorder,
-                            locked && styles.cyborgMoveCellLocked,
+                            (locked || waitingForTurn) && styles.cyborgMoveCellLocked,
                           ]}
                           testID={`combat-minion-skill-${sId}`}
                         >
-                          <PixelText size={9} color={locked ? COLORS.textDim : COLORS.neonGreen} bold>
+                          <PixelText size={9} color={interactable ? COLORS.neonGreen : COLORS.textDim} bold>
                             {idx + 1}.
                           </PixelText>
                           <PixelText
                             size={9}
-                            color={locked ? COLORS.textDim : COLORS.neonGreen}
+                            color={interactable ? COLORS.neonGreen : COLORS.textDim}
                             bold
                             style={{ textAlign: 'center', marginTop: 1 }}
                           >
