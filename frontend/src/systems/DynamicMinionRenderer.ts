@@ -79,7 +79,7 @@ export function resolveMinionSpriteUri(
   const stage = Math.max(1, Math.min(4, base + evolutionTierOffset));
   // Cache-buster keyed to the script that generated the sprites — bump if
   // we re-slice the sheet so devices fetch the new asset cleanly.
-  const v = 'v1';
+  const v = 'v3';
   return `${BASE}/${line}_${stage}.png?${v}`;
 }
 
