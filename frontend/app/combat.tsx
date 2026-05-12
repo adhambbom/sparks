@@ -20,6 +20,22 @@ import {
 } from '../src/systems/QuantumStorage';
 import { executeMinionSkill, getMinionSkillView } from '../src/systems/TamedCombat';
 import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicMinionRenderer';
+import { ENEMIES as _ENEMIES } from '../src/data/gameData';
+
+/** Resolve the *deployed minion* sprite uri:
+ *  1. Prefer the per-variant Quantum-Minion sheet (phreak/vrghost/mech) if mapped.
+ *  2. Fallback to the species' boss/scout silhouette from the regular enemy
+ *     atlas so legacy captures (e.g. tinkerer_drone, gear_golem) still SWAP
+ *     the player sprite instead of silently falling back to ADHAMB.
+ *  Returns null only when speciesId is completely unknown. */
+function resolveDeployedMinionUri(speciesId: string): string | null {
+  if (hasMinionSprite(speciesId)) return resolveMinionSpriteUri(speciesId);
+  const e = (_ENEMIES as any)[speciesId];
+  if (!e) return null;
+  return e.isBoss || (e.tier ?? 1) >= 3
+    ? SPRITE_ASSETS.enemyJuggernaut
+    : SPRITE_ASSETS.enemyScout;
+}
 
 type ActionPanel = 'main' | 'skills' | 'items' | 'spikes' | 'minionDeploy' | 'minionSkills';
 
@@ -588,11 +604,11 @@ export default function CombatScreen() {
               }}
             >
               {/* Dynamic source: minion sprite if deployed, otherwise the player.
-                  `resolveMinionSpriteUri` falls back to null if speciesId
-                  isn't in SPECIES_LINE_MAP, so we fall through to the player. */}
+                  `resolveDeployedMinionUri` falls back through Quantum sheet →
+                  enemy atlas → null so any captured species swaps the slot. */}
               <Image
                 source={{
-                  uri: (deployedMinion && resolveMinionSpriteUri(deployedMinion.speciesId)) ||
+                  uri: (deployedMinion && resolveDeployedMinionUri(deployedMinion.speciesId)) ||
                        SPRITE_ASSETS.player,
                 }}
                 style={{
@@ -789,65 +805,84 @@ export default function CombatScreen() {
           const linkStatus = busy ? 'BUFFERING' : 'ACTIVE';
           return (
             <View style={styles.cyborgPanel}>
-              {/* LEFT — 2×2 move grid */}
+              {/* LEFT — 2 rows of 2 cells (explicit grid avoids the flex/aspectRatio
+                  overlap bug that caused move labels to stack on top of each other). */}
               <View style={styles.cyborgMoveGrid}>
-                {[0, 1, 2, 3].map((idx) => {
-                  const sId = allSlots[idx];
-                  const sk = getMinionSkillView(sId);
-                  const locked = !known.has(sId) || !sk;
-                  return (
-                    <TouchableOpacity
-                      key={sId}
-                      disabled={locked}
-                      onPress={() => sk && playerMinionSkill(sk.id)}
-                      style={[styles.cyborgMoveCell, locked && styles.cyborgMoveCellLocked]}
-                      testID={`combat-minion-skill-${sId}`}
-                    >
-                      <PixelText size={11} color={locked ? COLORS.textDim : COLORS.neonGreen} bold>
-                        {idx + 1}. {sk ? sk.name.toUpperCase() : '— LOCKED —'}
-                      </PixelText>
-                      {!locked && sk && (
-                        <PixelText size={8} color={COLORS.textDim} style={{ marginTop: 3 }}>
-                          ×{sk.power} pwr
-                        </PixelText>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-                {/* Plus-sign cross divider for the 2×2 cyborg grid effect. */}
-                <View pointerEvents="none" style={styles.cyborgGridCrossH} />
-                <View pointerEvents="none" style={styles.cyborgGridCrossV} />
+                {[0, 1].map((rowIdx) => (
+                  <View key={rowIdx} style={styles.cyborgMoveRow}>
+                    {[0, 1].map((colIdx) => {
+                      const idx = rowIdx * 2 + colIdx;
+                      const sId = allSlots[idx];
+                      const sk = getMinionSkillView(sId);
+                      const locked = !known.has(sId) || !sk;
+                      return (
+                        <TouchableOpacity
+                          key={sId}
+                          disabled={locked}
+                          onPress={() => sk && playerMinionSkill(sk.id)}
+                          style={[
+                            styles.cyborgMoveCell,
+                            // Inner borders for the segmented HUD look.
+                            colIdx === 0 && styles.cyborgMoveCellRightBorder,
+                            rowIdx === 0 && styles.cyborgMoveCellBottomBorder,
+                            locked && styles.cyborgMoveCellLocked,
+                          ]}
+                          testID={`combat-minion-skill-${sId}`}
+                        >
+                          <PixelText size={9} color={locked ? COLORS.textDim : COLORS.neonGreen} bold>
+                            {idx + 1}.
+                          </PixelText>
+                          <PixelText
+                            size={9}
+                            color={locked ? COLORS.textDim : COLORS.neonGreen}
+                            bold
+                            style={{ textAlign: 'center', marginTop: 1 }}
+                          >
+                            {sk ? sk.name.toUpperCase() : '— LOCKED —'}
+                          </PixelText>
+                          {!locked && sk && (
+                            <PixelText size={7} color={COLORS.textDim} style={{ marginTop: 2 }}>
+                              ×{sk.power}
+                            </PixelText>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
               </View>
 
               {/* RIGHT — stacked telemetry */}
               <View style={styles.cyborgRightCol}>
-                {/* Top frame: OMNI-REGISTRY */}
+                {/* Top frame: OMNI-REGISTRY (smaller header to fit the narrow column) */}
                 <View style={styles.cyborgRegistryFrame}>
-                  <PixelText size={11} color={COLORS.neonGreen} bold>OMNI-REGISTRY</PixelText>
-                  <PixelText size={10} color={COLORS.text}>Synthetica</PixelText>
-                  <View style={{ height: 4 }} />
-                  <PixelText size={9} color={COLORS.text} bold>DEPLOYED MINION:</PixelText>
-                  <PixelText size={9} color={COLORS.text}>[{deployedMinion.name.toUpperCase()}]</PixelText>
+                  <PixelText size={8} color={COLORS.neonGreen} bold>OMNI-REGISTRY</PixelText>
+                  <PixelText size={9} color={COLORS.text}>Synthetica</PixelText>
+                  <View style={{ height: 3 }} />
+                  <PixelText size={7} color={COLORS.text} bold>DEPLOYED MINION:</PixelText>
+                  <PixelText size={8} color={COLORS.text} numberOfLines={1}>
+                    [{deployedMinion.name.toUpperCase()}]
+                  </PixelText>
                 </View>
                 {/* Bottom frame: system diagnostics terminal */}
                 <View style={styles.cyborgDiagFrame}>
-                  <PixelText size={8} color={COLORS.neonGreen}>
-                    CORE TEMP: {coreTemp}
+                  <PixelText size={7} color={COLORS.neonGreen} numberOfLines={1}>
+                    CORE: {coreTemp}
                   </PixelText>
-                  <PixelText size={8} color={COLORS.neonGreen}>
-                    UNIT INTEGRITY: {integrityPct}%
+                  <PixelText size={7} color={COLORS.neonGreen} numberOfLines={1}>
+                    INTEGRITY: {integrityPct}%
                   </PixelText>
-                  <PixelText size={8} color={COLORS.neonGreen}>
-                    COMMAND LINK: {linkStatus}
+                  <PixelText size={7} color={COLORS.neonGreen} numberOfLines={1}>
+                    LINK: {linkStatus}
                   </PixelText>
                   {enemyDefDebuff > 0 && (
-                    <PixelText size={8} color={COLORS.neonMagenta}>
-                      INTRUSION: ENEMY DEF -30% ({enemyDefDebuff}T)
+                    <PixelText size={7} color={COLORS.neonMagenta} numberOfLines={1}>
+                      INTRUSION ({enemyDefDebuff}T)
                     </PixelText>
                   )}
                   {enemyStun > 0 && (
-                    <PixelText size={8} color={COLORS.neonMagenta}>
-                      LOCKDOWN: STUN {enemyStun}T
+                    <PixelText size={7} color={COLORS.neonMagenta} numberOfLines={1}>
+                      LOCKDOWN ({enemyStun}T)
                     </PixelText>
                   )}
                 </View>
@@ -856,7 +891,7 @@ export default function CombatScreen() {
                   style={styles.cyborgRecallBtn}
                   onPress={() => { setDeployedMinion(null); setPanel('main'); sfx.cancel(); }}
                 >
-                  <PixelText size={9} color={COLORS.neonRed} bold>✕ RECALL</PixelText>
+                  <PixelText size={8} color={COLORS.neonRed} bold>✕ RECALL</PixelText>
                 </TouchableOpacity>
               </View>
             </View>
@@ -989,76 +1024,88 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   // ─── Cyborg Battle Move Panel (full takeover when picking minion skills) ───
-  // Left half: 2×2 numbered move grid (cyan glow, green text — mockup spec).
+  // Left half: 2×2 numbered move grid via explicit rows (each row = 50% height,
+  // each cell = 50% width). Avoids the flex-wrap+aspectRatio overlap bug.
   // Right half: stacked OMNI-REGISTRY card + diagnostic terminal frame.
   cyborgPanel: {
     flexDirection: 'row',
     gap: 6,
     width: '100%',
+    minHeight: 180,
   },
   cyborgMoveGrid: {
     flex: 1.15,
-    aspectRatio: 1.05,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     backgroundColor: '#001a2a',
     borderWidth: 2,
     borderColor: COLORS.neonCyan,
-    // Subtle cyan glow ring per mockup
+    // Cyan glow ring per mockup
     shadowColor: COLORS.neonCyan,
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
+    shadowOpacity: 0.7,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  cyborgMoveRow: {
+    flex: 1,
+    flexDirection: 'row',
   },
   cyborgMoveCell: {
-    width: '50%',
-    height: '50%',
+    flex: 1,
     padding: 6,
     justifyContent: 'center',
     alignItems: 'center',
+    // Inner divider lines (only on first col / first row cells) give the
+    // segmented HUD look without overlapping siblings.
+  },
+  cyborgMoveCellRightBorder: {
+    borderRightWidth: 1.5,
+    borderRightColor: COLORS.neonCyan,
+  },
+  cyborgMoveCellBottomBorder: {
+    borderBottomWidth: 1.5,
+    borderBottomColor: COLORS.neonCyan,
   },
   cyborgMoveCellLocked: {
     opacity: 0.4,
   },
-  // Plus-sign cross dividers — give the grid the segmented HUD look.
-  cyborgGridCrossH: {
-    position: 'absolute',
-    left: 4, right: 4, top: '50%',
-    height: 1.5,
-    backgroundColor: COLORS.neonCyan,
-    opacity: 0.7,
-  },
-  cyborgGridCrossV: {
-    position: 'absolute',
-    top: 4, bottom: 4, left: '50%',
-    width: 1.5,
-    backgroundColor: COLORS.neonCyan,
-    opacity: 0.7,
-  },
   cyborgRightCol: {
     flex: 1,
     gap: 6,
+    minHeight: 180,
   },
   cyborgRegistryFrame: {
     backgroundColor: '#0a1a0a',
     borderWidth: 2,
     borderColor: COLORS.neonGreen,
-    padding: 8,
-    minHeight: 70,
+    padding: 6,
+    minHeight: 56,
+    shadowColor: COLORS.neonGreen,
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   cyborgDiagFrame: {
     flex: 1,
     backgroundColor: '#0a1a0a',
     borderWidth: 2,
     borderColor: COLORS.neonGreen,
-    padding: 8,
+    padding: 6,
+    shadowColor: COLORS.neonGreen,
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 0 },
   },
   cyborgRecallBtn: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: COLORS.neonRed,
-    paddingVertical: 6,
+    paddingVertical: 5,
     alignItems: 'center',
     backgroundColor: '#1a0a0a',
+    shadowColor: COLORS.neonRed,
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 0 },
   },
   // Dark elliptical ground shadow under each enemy sprite
   groundShadow: {
