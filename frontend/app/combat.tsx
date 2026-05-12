@@ -9,8 +9,18 @@ import { StatBar } from '../src/components/StatBar';
 import Floater from '../src/components/Floater';
 import { useGame } from '../src/contexts/GameContext';
 import { sfx } from '../src/utils/audio';
+// ── Quantum Taming (modular extension) ────────────────────────────────
+// These modules attach capture + minion-deploy behaviour without altering
+// the existing turn loop or enemy logic.
+import {
+  rollQuarantine,
+  buildCapturedMinion,
+  SPIKE_MULTIPLIER,
+  CapturedMinion,
+} from '../src/systems/QuantumStorage';
+import { executeMinionSkill, getMinionSkillView } from '../src/systems/TamedCombat';
 
-type ActionPanel = 'main' | 'skills' | 'items';
+type ActionPanel = 'main' | 'skills' | 'items' | 'spikes' | 'minionDeploy' | 'minionSkills';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -33,7 +43,7 @@ export default function CombatScreen() {
   // Did the overworld flag this encounter as a mini-boss roamer? If so we use
   // the Juggernaut sprite to match what was rendered in the castle screen.
   const bossFromRoute = params.boss === '1' || params.mode === 'boss';
-  const { state, applyDamage, applyHeal, applyMpCost, awardXp, addGold, addItem, removeItem, saveToServer } = useGame();
+  const { state, applyDamage, applyHeal, applyMpCost, awardXp, addGold, addItem, removeItem, saveToServer, addCapturedMinion, markSpeciesSeen } = useGame();
   const [enemyId] = useState<string>(params.enemyId || 'spider_bot');
   const enemyData = ENEMIES[enemyId];
   // Unified boss flag — true if either the data-file marks this enemy as a
@@ -53,6 +63,15 @@ export default function CombatScreen() {
   const [shield, setShield] = useState(false); // player has data shield
   const [enemyBurn, setEnemyBurn] = useState(0); // burn turns
   const [haste, setHaste] = useState(false);
+  // ── Quantum Taming state (additive — doesn't touch existing combat flow) ──
+  // Active deployed minion: replaces the next player turn with minion skills.
+  const [deployedMinion, setDeployedMinion] = useState<CapturedMinion | null>(null);
+  // Per-battle DEF debuff from Data Leak (mirrors enemyBurn pattern).
+  const [enemyDefDebuff, setEnemyDefDebuff] = useState(0); // turns remaining
+  // Enemy stun (DDOS Overload) — when > 0, skip the enemy's next turn.
+  const [enemyStun, setEnemyStun] = useState(0);
+  // Self-buff: Firewall Spike grants +50% DEF for N turns.
+  const [firewallTurns, setFirewallTurns] = useState(0);
   const enemyShake = useRef(new Animated.Value(0)).current;
   const playerShake = useRef(new Animated.Value(0)).current;
   const [floaters, setFloaters] = useState<{ id: number; text: string; color: string; side: 'p' | 'e' }[]>([]);
@@ -198,6 +217,12 @@ export default function CombatScreen() {
     setTimeout(() => endPlayerTurn(), 200);
   };
 
+  // Mark species as encountered (for the Registry screen). Idempotent.
+  useEffect(() => {
+    if (enemyData?.id) markSpeciesSeen(enemyData.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const playerRun = () => {
     if (busy) return;
     if (params.mode === 'arena') {
@@ -221,6 +246,132 @@ export default function CombatScreen() {
       pushLog('Failed to escape!');
       setTimeout(() => endPlayerTurn(), 220);
     }
+  };
+
+  // ── Quantum Taming: QUARANTINE (spike consumption + capture roll) ──
+  // Runs the rollQuarantine formula from QuantumStorage.ts and either:
+  //   \u2022 success \u2192 ENEMIES[id] becomes a CapturedMinion in the player's party.
+  //                 The battle ends as a half-victory (no XP/gold, but a new ally).
+  //   \u2022 failure \u2192 spike is still consumed and the enemy gets a free turn,
+  //                 mirroring Pokémon-style risk/reward.
+  const playerQuarantine = (spikeId: string) => {
+    if (busy) return;
+    const spike = ITEMS[spikeId];
+    if (!spike || spike.type !== 'spike') return;
+    const inv = state.player.inventory.find((i) => i.id === spikeId);
+    if (!inv || inv.qty <= 0) {
+      pushLog('No spikes left!');
+      sfx.cancel();
+      return;
+    }
+    if (isBoss) {
+      pushLog('Boss firewalls reject the spike!');
+      sfx.cancel();
+      return;
+    }
+    setBusy(true);
+    sfx.skill();
+    removeItem(spikeId, 1);
+    const mult = SPIKE_MULTIPLIER[spikeId] ?? 1.0;
+    const { success, chance } = rollQuarantine({
+      currentHp: enemyHp,
+      maxHp: enemyData.hp,
+      multiplier: mult,
+      isBoss,
+    });
+    pushLog(`${spike.name}! (${Math.round(chance * 100)}% chance)`);
+    setPanel('main');
+    if (success) {
+      // Build the CapturedMinion from current battle stats, route into storage.
+      const minion = buildCapturedMinion({
+        speciesId: enemyData.id,
+        currentHp: Math.max(1, enemyHp),
+        enemyMaxHp: enemyData.hp,
+        enemyAtk: enemyData.atk,
+        enemyDef: enemyData.def,
+        enemySpd: enemyData.spd,
+        playerLevel: player.level,
+      });
+      setTimeout(() => {
+        if (minion) {
+          const { slot } = addCapturedMinion(minion);
+          sfx.victory();
+          pushLog(`★ Quarantined ${enemyData.name}!`);
+          pushLog(slot === 'party' ? 'Added to active party.' : 'Sent to Extended Storage.');
+        }
+        // End battle as capture-victory (no XP/gold per design — capture IS the reward).
+        setEnemyHp(0);
+        setTurn('end');
+        saveToServer();
+        setTimeout(() => {
+          if (params.mode === 'arena') {
+            router.replace({ pathname: '/arena', params: { wave: params.arenaWave || '1', result: 'win' } });
+          } else {
+            router.back();
+          }
+        }, 700);
+      }, 350);
+    } else {
+      sfx.cancel();
+      pushLog('It broke free!');
+      setTimeout(() => endPlayerTurn(), 320);
+    }
+  };
+
+  // ── Quantum Taming: DEPLOY MINION ──
+  // Sets the active minion and routes UI into the minion-skill submenu.
+  // Does NOT end the player's turn \u2014 the player still has to pick a skill.
+  const playerDeployMinion = (minion: CapturedMinion) => {
+    if (busy) return;
+    if (deployedMinion) {
+      pushLog('A minion is already deployed!');
+      sfx.cancel();
+      return;
+    }
+    setDeployedMinion(minion);
+    pushLog(`Deployed ${minion.name}! Choose a skill.`);
+    sfx.confirm();
+    setPanel('minionSkills');
+  };
+
+  // ── Quantum Taming: EXECUTE MINION SKILL ──
+  // Translates blueprint's TamedCombatInterceptor.ExecuteMinionAction into
+  // a single-turn action that runs through the existing damage pipeline.
+  const playerMinionSkill = (skillId: string) => {
+    if (busy || !deployedMinion) return;
+    setBusy(true);
+    const result = executeMinionSkill({
+      minion: deployedMinion,
+      skillId,
+      enemy: { def: Math.max(0, enemyData.def - (enemyDefDebuff > 0 ? Math.floor(enemyData.def * 0.3) : 0)) },
+    });
+    // Audio
+    if (result.sfxTag === 'bigHit') sfx.bigHit();
+    else if (result.sfxTag === 'skill') sfx.skill();
+    else sfx.hit();
+    // Damage application — uses the SAME pipeline as the existing playerAttack:
+    // mutate enemy HP via setEnemyHp + floater + shake. No engine changes.
+    setEnemyHp((hp) => Math.max(0, hp - result.damage));
+    showFloater(`-${result.damage}`, COLORS.neonMagenta, 'e');
+    shakeAnim(enemyShake);
+    pushLog(result.log);
+    // Status modulation — wired into existing state slots:
+    if (result.status === 'defense_down') {
+      setEnemyDefDebuff(result.statusTurns);
+      pushLog(`${enemyData.name}'s DEF dropped!`);
+    } else if (result.status === 'stun') {
+      setEnemyStun((s) => Math.max(s, result.statusTurns));
+      pushLog(`${enemyData.name} is stunned!`);
+    } else if (result.status === 'burn') {
+      setEnemyBurn(result.statusTurns);
+    } else if (result.status === 'firewall_up') {
+      setFirewallTurns(result.statusTurns);
+      pushLog('Firewall raised! DEF +50% for 2 turns.');
+    }
+    // Minion is consumed for this battle after one use (balance).
+    setDeployedMinion(null);
+    setPanel('main');
+    setTimeout(() => endPlayerTurn(), 280);
   };
 
   const endPlayerTurn = () => {
@@ -247,6 +398,16 @@ export default function CombatScreen() {
   };
 
   const enemyTurn = () => {
+    // Quantum Taming: DDOS Overload may have stunned the enemy. Skip their turn.
+    if (enemyStun > 0) {
+      pushLog(`${enemyData.name} is stunned and skips a turn!`);
+      setEnemyStun((s) => Math.max(0, s - 1));
+      setTimeout(() => {
+        setBusy(false);
+        setTurn('player');
+      }, 320);
+      return;
+    }
     setTurn('enemy');
     setBusy(true);
     setTimeout(() => {
@@ -254,7 +415,7 @@ export default function CombatScreen() {
       const ab = ABILITIES[abId];
       let dmg = 0;
       if (ab && ab.type === 'attack') {
-        dmg = computeDamage(ab.power, ab.element, enemyAtk, player.def);
+        dmg = computeDamage(ab.power, ab.element, enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0));
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); pushLog('Shield absorbs!'); }
         applyDamage(dmg);
         sfx.damage();
@@ -262,7 +423,7 @@ export default function CombatScreen() {
         shakeAnim(playerShake);
         pushLog(`${enemyData.name} ${ab.name}! ${dmg} dmg.`);
       } else {
-        dmg = computeDamage(1.0, 'physical', enemyAtk, player.def);
+        dmg = computeDamage(1.0, 'physical', enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0));
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); }
         applyDamage(dmg);
         sfx.damage();
@@ -270,6 +431,9 @@ export default function CombatScreen() {
         shakeAnim(playerShake);
         pushLog(`${enemyData.name} attacks for ${dmg}!`);
       }
+      // Tick quantum-taming status durations once per enemy turn.
+      if (enemyDefDebuff > 0) setEnemyDefDebuff((d) => d - 1);
+      if (firewallTurns > 0) setFirewallTurns((f) => f - 1);
       setTimeout(() => {
         // Check player death
         if (state && state.player.hp - dmg <= 0) {
@@ -458,10 +622,106 @@ export default function CombatScreen() {
             <View style={styles.actionCell}>
               <PixelButton title="ITEM" onPress={() => setPanel('items')} color={COLORS.neonGreen} testID="combat-item" full />
             </View>
+            {/* ── Quantum Taming buttons ────────────────────────────────── */}
+            <View style={styles.actionCell}>
+              <PixelButton
+                title="TAME"
+                onPress={() => setPanel('spikes')}
+                color={COLORS.neonMagenta}
+                testID="combat-tame"
+                full
+              />
+            </View>
+            <View style={styles.actionCell}>
+              <PixelButton
+                title="CALL"
+                onPress={() => setPanel('minionDeploy')}
+                color={COLORS.neonYellow}
+                testID="combat-call"
+                full
+              />
+            </View>
             <View style={styles.actionCell}>
               <PixelButton title="RUN" onPress={playerRun} color={COLORS.textDim} testID="combat-run" full />
             </View>
           </View>
+        )}
+
+        {/* ── QUARANTINE spike picker ─────────────────────────────────── */}
+        {panel === 'spikes' && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
+            {player.inventory.filter(i => ITEMS[i.id]?.type === 'spike').map((inv) => {
+              const it = ITEMS[inv.id];
+              const mult = SPIKE_MULTIPLIER[inv.id] ?? 1.0;
+              const preview = Math.round(Math.max(0.02, Math.min(0.98, 0.5 * mult * (1 - enemyHp / Math.max(1, enemyData.hp)))) * 100);
+              return (
+                <TouchableOpacity
+                  key={inv.id}
+                  style={[styles.skillBtn, { borderColor: COLORS.neonMagenta }]}
+                  onPress={() => playerQuarantine(inv.id)}
+                  testID={`combat-spike-${inv.id}`}
+                >
+                  <PixelText size={11} color={COLORS.neonMagenta} bold>{it.name.toUpperCase()}</PixelText>
+                  <PixelText size={9} color={COLORS.textDim}>x{inv.qty} · ~{preview}%</PixelText>
+                  <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>{it.desc}</PixelText>
+                </TouchableOpacity>
+              );
+            })}
+            {player.inventory.filter(i => ITEMS[i.id]?.type === 'spike').length === 0 && (
+              <PixelText size={11} color={COLORS.textDim}>No containment spikes. Buy from Jax.</PixelText>
+            )}
+            <PixelButton title="✕" onPress={() => setPanel('main')} color={COLORS.textDim} size="sm" />
+          </ScrollView>
+        )}
+
+        {/* ── DEPLOY MINION picker ────────────────────────────────────── */}
+        {panel === 'minionDeploy' && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
+            {(state.quantum?.party ?? []).map((m) => (
+              <TouchableOpacity
+                key={m.uid}
+                style={[styles.skillBtn, { borderColor: COLORS.neonYellow }]}
+                onPress={() => playerDeployMinion(m)}
+                testID={`combat-deploy-${m.uid}`}
+              >
+                <PixelText size={11} color={COLORS.neonYellow} bold>{m.name.toUpperCase()}</PixelText>
+                <PixelText size={9} color={COLORS.textDim}>Lv{m.level} · T{m.tier}</PixelText>
+                <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>ATK {m.atk} · {m.skills.length} skills</PixelText>
+              </TouchableOpacity>
+            ))}
+            {(state.quantum?.party ?? []).length === 0 && (
+              <PixelText size={11} color={COLORS.textDim}>No minions in party. Quarantine some!</PixelText>
+            )}
+            <PixelButton title="✕" onPress={() => setPanel('main')} color={COLORS.textDim} size="sm" />
+          </ScrollView>
+        )}
+
+        {/* ── MINION SKILL picker (after deploy) ──────────────────────── */}
+        {panel === 'minionSkills' && deployedMinion && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
+            {deployedMinion.skills.map((sId) => {
+              const sk = getMinionSkillView(sId);
+              if (!sk) return null;
+              return (
+                <TouchableOpacity
+                  key={sId}
+                  style={[styles.skillBtn, { borderColor: COLORS.neonMagenta }]}
+                  onPress={() => playerMinionSkill(sId)}
+                  testID={`combat-minion-skill-${sId}`}
+                >
+                  <PixelText size={11} color={COLORS.neonMagenta} bold>{sk.name.toUpperCase()}</PixelText>
+                  <PixelText size={9} color={COLORS.textDim}>×{sk.power} pwr</PixelText>
+                  <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>{sk.desc}</PixelText>
+                </TouchableOpacity>
+              );
+            })}
+            <PixelButton
+              title="✕ RECALL"
+              onPress={() => { setDeployedMinion(null); setPanel('main'); }}
+              color={COLORS.textDim}
+              size="sm"
+            />
+          </ScrollView>
         )}
 
         {panel === 'skills' && (
@@ -670,8 +930,8 @@ const styles = StyleSheet.create({
   },
   statRow: { flexDirection: 'row', alignItems: 'center' },
   statusIcons: { gap: 2, alignItems: 'flex-end' },
-  // (4) Action menu — 2×2 grid (RN-Web has no `display: grid`, so we fake it
-  //     with flex-wrap + 48%-width cells).
+  // (4) Action menu — 3×2 grid (6 buttons: ATTACK/SKILL/ITEM // TAME/CALL/RUN).
+  //     RN-Web has no `display: grid`, so we fake it with flex-wrap + 32%-width cells.
   actionGrid: {
     width: '100%',
     flexDirection: 'row',
@@ -681,7 +941,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   actionCell: {
-    width: '48.5%',
+    width: '32.5%',
   },
   skillsRow: { gap: 8, paddingVertical: 6 },
   skillBtn: {

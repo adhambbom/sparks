@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
 import { api } from '../utils/api';
 import { ITEMS, ABILITIES, xpForNextLevel } from '../data/gameData';
+import type { CapturedMinion } from '../systems/QuantumStorage';
+import { routeToStorage, summarizeRegistry } from '../systems/QuantumStorage';
 
 export type GameState = {
   player: {
@@ -30,6 +32,19 @@ export type GameState = {
     arenaUnlocked: boolean;
     arenaBestWave: number;
   };
+  // ─── Quantum Taming slice ─────────────────────────────────────────
+  // Optional so existing saves load without migration. Read sites use
+  // `?? []` to default when absent.
+  quantum?: {
+    /** Up to MAX_PARTY (6) actively deployable minions. */
+    party: CapturedMinion[];
+    /** Overflow when party is full \u2014 lives on the server, hot-swappable. */
+    extendedStorage: CapturedMinion[];
+    /** Species ids ever encountered (whether captured or not). */
+    seenSpecies: string[];
+    /** Species ids captured at least once \u2014 derived but cached for speed. */
+    capturedSpecies: string[];
+  };
   lastSaved?: string;
 };
 
@@ -51,6 +66,11 @@ type GameCtx = {
   unlockAbility: (id: string) => void;
   equip: (slot: 'weapon' | 'armor', itemId: string) => void;
   setPosition: (x: number, y: number) => void;
+  // ─── Quantum Taming ──────────────────────────────────────────────
+  addCapturedMinion: (m: CapturedMinion) => { slot: 'party' | 'extended' };
+  markSpeciesSeen: (speciesId: string) => void;
+  swapPartyMinion: (partyIndex: number, storageIndex: number) => void;
+  releaseMinion: (uid: string) => void;
 };
 
 const Ctx = createContext<GameCtx>({} as GameCtx);
@@ -251,12 +271,76 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(next);
   };
 
+  // ─── Quantum Taming mutations ──────────────────────────────────────
+  // Lazy-initialise the `quantum` slice so legacy saves work without
+  // a backend migration step. All readers also fall back via `?? []`.
+  const ensureQuantum = (s: GameState): GameState['quantum'] =>
+    s.quantum ?? { party: [], extendedStorage: [], seenSpecies: [], capturedSpecies: [] };
+
+  const addCapturedMinion = (m: CapturedMinion): { slot: 'party' | 'extended' } => {
+    if (!stateRef.current) return { slot: 'extended' };
+    const next = { ...stateRef.current };
+    const q = ensureQuantum(next);
+    const routed = routeToStorage(q.party, q.extendedStorage, m);
+    const rolled = summarizeRegistry(q.seenSpecies, routed.party, routed.extendedStorage);
+    next.quantum = {
+      party: routed.party,
+      extendedStorage: routed.extendedStorage,
+      seenSpecies: rolled.seen,
+      capturedSpecies: rolled.captured,
+    };
+    setState(next);
+    return { slot: routed.slot };
+  };
+
+  const markSpeciesSeen = (speciesId: string) => {
+    if (!stateRef.current || !speciesId) return;
+    const next = { ...stateRef.current };
+    const q = ensureQuantum(next);
+    if (q.seenSpecies.includes(speciesId)) return;
+    next.quantum = {
+      party: q.party,
+      extendedStorage: q.extendedStorage,
+      seenSpecies: [...q.seenSpecies, speciesId],
+      capturedSpecies: q.capturedSpecies,
+    };
+    setState(next);
+  };
+
+  const swapPartyMinion = (partyIndex: number, storageIndex: number) => {
+    if (!stateRef.current) return;
+    const next = { ...stateRef.current };
+    const q = ensureQuantum(next);
+    if (partyIndex < 0 || partyIndex >= q.party.length) return;
+    if (storageIndex < 0 || storageIndex >= q.extendedStorage.length) return;
+    const newParty = [...q.party];
+    const newStore = [...q.extendedStorage];
+    const tmp = newParty[partyIndex];
+    newParty[partyIndex] = newStore[storageIndex];
+    newStore[storageIndex] = tmp;
+    next.quantum = { ...q, party: newParty, extendedStorage: newStore };
+    setState(next);
+  };
+
+  const releaseMinion = (uid: string) => {
+    if (!stateRef.current) return;
+    const next = { ...stateRef.current };
+    const q = ensureQuantum(next);
+    next.quantum = {
+      ...q,
+      party: q.party.filter((m) => m.uid !== uid),
+      extendedStorage: q.extendedStorage.filter((m) => m.uid !== uid),
+    };
+    setState(next);
+  };
+
   return (
     <Ctx.Provider value={{
       state, setState,
       loadFromServer, saveToServer, saveCheckpoint, restoreCheckpoint, createCharacter,
       applyDamage, applyHeal, applyMpCost,
       addItem, removeItem, addGold, awardXp, unlockAbility, equip, setPosition,
+      addCapturedMinion, markSpeciesSeen, swapPartyMinion, releaseMinion,
     }}>
       {children}
     </Ctx.Provider>

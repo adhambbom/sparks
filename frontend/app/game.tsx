@@ -1063,6 +1063,8 @@ export default function GameScreen() {
             <View style={{ height: 8 }} />
             <PixelButton title="INVENTORY" onPress={() => { setPauseOpen(false); router.push('/inventory'); }} color={COLORS.neonCyan} full />
             <View style={{ height: 8 }} />
+            <PixelButton title="QUANTUM REGISTRY" onPress={() => { setPauseOpen(false); router.push('/registry'); }} color={COLORS.neonYellow} full />
+            <View style={{ height: 8 }} />
             <PixelButton title="SAVE CHECKPOINT" onPress={handleSave} color={COLORS.neonYellow} full />
             <View style={{ height: 8 }} />
             <PixelButton title="QUIT TO TITLE" onPress={() => { setPauseOpen(false); router.replace('/'); }} color={COLORS.textDim} full />

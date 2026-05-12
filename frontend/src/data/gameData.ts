@@ -455,7 +455,7 @@ export type Item = {
   id: string;
   name: string;
   desc: string;
-  type: 'consumable' | 'weapon' | 'armor' | 'material';
+  type: 'consumable' | 'weapon' | 'armor' | 'material' | 'spike';
   cost?: number;
   effect?: { hp?: number; mp?: number; atk?: number; def?: number };
   icon: string; // emoji or text fallback
@@ -467,6 +467,14 @@ export const ITEMS: Record<string, Item> = {
   mp_potion: { id: 'mp_potion', name: 'Quantum Battery', desc: 'Fully restores MP.', type: 'consumable', cost: 80, effect: { mp: 999 }, icon: 'BAT' },
   scrap_part: { id: 'scrap_part', name: 'Scrap Part', desc: 'Sell or trade material.', type: 'material', cost: 10, icon: 'SCR' },
   rare_chip: { id: 'rare_chip', name: 'Rare Chip', desc: 'Valuable Glitch fragment.', type: 'material', cost: 80, icon: 'CHP' },
+  // ── Quantum Taming consumables ─────────────────────────────────────
+  // Capture chance = baseChance(0.5) × multiplier × (1 - hp/maxHp)
+  // Spike tiers escalate the multiplier so players can decide whether
+  // to spend cheap basic spikes on weak foes or hoard glitched spikes
+  // for high-tier prizes. Detected via `type: 'spike'` in combat.tsx.
+  containment_spike: { id: 'containment_spike', name: 'Containment Spike', desc: 'Quarantines weak foes. ×1.0 chance.', type: 'spike', cost: 60, icon: 'SPK' },
+  quantum_spike:     { id: 'quantum_spike',     name: 'Quantum Spike',     desc: 'High-grade trap. ×1.7 chance.',       type: 'spike', cost: 180, icon: 'QSK' },
+  glitched_spike:    { id: 'glitched_spike',    name: 'Glitched Spike',    desc: 'Corrupted trap. ×2.8 chance.',        type: 'spike', cost: 480, icon: 'GSK' },
   // Weapons
   training_baton: { id: 'training_baton', name: 'Training Baton', desc: 'Standard issue. +0 ATK', type: 'weapon', cost: 0, effect: { atk: 0 }, icon: 'BAT' },
   plasma_baton: { id: 'plasma_baton', name: 'Plasma Baton', desc: 'Energized melee. +6 ATK', type: 'weapon', cost: 200, effect: { atk: 6 }, icon: 'PLB' },
@@ -484,6 +492,9 @@ export const STORE_ITEMS = [
   'health_pack',
   'energy_cell',
   'mp_potion',
+  'containment_spike',
+  'quantum_spike',
+  'glitched_spike',
   'plasma_baton',
   'cyber_blade',
   'pulse_cannon',
