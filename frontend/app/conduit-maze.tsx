@@ -18,7 +18,6 @@ import {
   Dimensions,
   Platform,
   Image,
-  ScrollView,
   TouchableOpacity,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
@@ -39,7 +38,6 @@ import {
   isWall,
 } from '../src/data/conduitMazeData';
 import { PixelText } from '../src/components/PixelText';
-import { PixelButton } from '../src/components/PixelButton';
 import { VirtualJoystick } from '../src/components/VirtualJoystick';
 import { useGame } from '../src/contexts/GameContext';
 import { sfx } from '../src/utils/audio';
@@ -102,20 +100,26 @@ export default function ConduitMazeScreen() {
   const { state, applyDamage, addGold, awardXp, applyHeal } = useGame() as any;
   const { width: SW, height: SH } = Dimensions.get('window');
 
-  // Compute tile size so the level fits the device width nicely.
-  // Reserve room for header + controls (~36% of vertical height).
-  const usableW = Math.min(SW - 16, 520);
-  const usableH = Math.max(360, SH * 0.62);
-  // Width-bound tile size (16 cols).
-  const tileFromW = Math.floor(usableW / COLS);
-  // Height-bound tile size (28 rows).
-  const tileFromH = Math.floor(usableH / ROWS);
-  const TILE_PX = Math.max(16, Math.min(tileFromW, tileFromH));
+  // Compute tile size for the HANDHELD-STYLE tight camera viewport.
+  // Layout: sidebar (~110px) + main viewport (rest of width).
+  // The player is always centered on the visible camera window; the
+  // backdrop scrolls smoothly beneath them as they move.
+  const SIDEBAR_W = SW >= 480 ? 140 : 108;
+  const usableW = Math.min(SW - SIDEBAR_W - 24, 520);
+  const usableH = Math.max(360, SH * 0.68);
+  // Visible-tile window — pokémon-style ~9×11 around the player.
+  const VISIBLE_COLS = 9;
+  const VISIBLE_ROWS = 11;
+  // Tile size derived from whichever axis is the bottleneck.
+  const tileFromW = Math.floor(usableW / VISIBLE_COLS);
+  const tileFromH = Math.floor(usableH / VISIBLE_ROWS);
+  const TILE_PX = Math.max(20, Math.min(tileFromW, tileFromH));
+  // Full-level art dimensions (the backdrop image is sized to this).
   const viewportW = TILE_PX * COLS;
   const viewportH = TILE_PX * ROWS;
-  // Display viewport clipped to a maximum window (camera follows player).
-  const camViewportW = Math.min(viewportW, usableW);
-  const camViewportH = Math.min(viewportH, usableH);
+  // Camera clipping window — the tight handheld viewport.
+  const camViewportW = TILE_PX * VISIBLE_COLS;
+  const camViewportH = TILE_PX * VISIBLE_ROWS;
 
   // ── Player state ─────────────────────────────────────────
   const [playerX, setPlayerX] = useState(SPAWN.x);
@@ -447,7 +451,7 @@ export default function ConduitMazeScreen() {
     >
       <View style={[styles.playerBox, { width: TILE_PX * 0.78, height: TILE_PX * 0.78 }]}>
         <PixelText size={Math.max(7, Math.round(TILE_PX * 0.32))} color="#0a0a14" bold>
-          {(state?.player?.name?.[0] || 'P').toUpperCase()}
+          {(state?.player?.name?.[0] || 'A').toUpperCase()}
         </PixelText>
       </View>
     </View>
@@ -491,12 +495,38 @@ export default function ConduitMazeScreen() {
     );
   };
 
+  // ── Derived sidebar data ─────────────────────────────────
+  const pHp = state?.player?.hp ?? 0;
+  const pMaxHp = state?.player?.maxHp ?? 1;
+  const pMp = state?.player?.mp ?? 0;
+  const pMaxMp = state?.player?.maxMp ?? 1;
+  const pLevel = state?.player?.level ?? 1;
+  const pName = state?.player?.name || 'OPERATIVE';
+
+  // Active mission line — derived from world flags.
+  const missionLine = !triggeredZones.has(`zone:${T.START_TERMINAL}`)
+    ? '▸ Locate the START TERMINAL'
+    : !miniBossCleared
+      ? '▸ Defeat the HIVE CUSTODIAN'
+      : '▸ Confront the QUANTUM AI · MEGA BOSS';
+
+  // Map legend — one chip per interactive tile type.
+  const legendEntries: { id: number; label: string }[] = [
+    { id: T.START_TERMINAL, label: 'START' },
+    { id: T.TROJAN_CORE, label: 'TROJAN' },
+    { id: T.DATA_STORAGE, label: 'DATA' },
+    { id: T.CONDUIT_CONSOLE, label: 'CONSOLE' },
+    { id: T.ACID, label: 'ACID' },
+    { id: T.MINI_BOSS_GATE, label: 'MINI-BOSS' },
+    { id: T.MEGA_BOSS_GATE, label: 'MEGA' },
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* HEADER */}
+      {/* TOP HEADER strip — slim, no chrome over the viewport */}
       <View style={styles.header}>
         <PixelText size={9} color={COLORS.neonMagenta}>// LEVEL 2B //</PixelText>
-        <PixelText size={15} color={COLORS.neonCyan} glow bold>THE CONDUIT MAZE</PixelText>
+        <PixelText size={14} color={COLORS.neonCyan} glow bold>THE CONDUIT MAZE</PixelText>
         <PixelText size={8} color={COLORS.textDim} style={{ marginTop: 2 }}>
           {`SECTOR ${String(playerX).padStart(2, '0')}-${String(playerY).padStart(2, '0')}`}
           {`   ROAMERS: ${roamers.length}`}
@@ -504,133 +534,263 @@ export default function ConduitMazeScreen() {
         </PixelText>
       </View>
 
-      {/* VIEWPORT — backdrop + grid + roamers + player */}
-      <View
-        style={[styles.viewport, { width: camViewportW, height: camViewportH }]}
-        testID="conduit-viewport"
-      >
-        {/* Parallax depth layer — dimmed darker copy of the backdrop. */}
-        <View style={{ position: 'absolute', left: -parX, top: -parY, opacity: 0.30 }}>
-          <Image
-            source={{ uri: backdropUri }}
-            style={{
-              width: viewportW * 1.08,
-              height: (viewportW * 1.08) / BG_ASPECT,
-            }}
-            resizeMode="cover"
-            fadeDuration={0}
-          />
+      {/* MAIN ROW — sidebar | viewport */}
+      <View style={styles.gameRow}>
+        {/* ═══════════════ LEFT SIDEBAR TERMINAL ═══════════════ */}
+        <View style={[styles.sidebar, { width: SIDEBAR_W }]} testID="conduit-sidebar">
+
+          {/* PARTY STATUS panel */}
+          <View style={styles.panel}>
+            <PixelText size={8} color={COLORS.neonCyan} bold>PARTY STATUS</PixelText>
+            <PixelText size={9} color={COLORS.text} style={{ marginTop: 4 }}>{pName.toUpperCase()}</PixelText>
+            <PixelText size={7} color={COLORS.textDim}>LV {pLevel}</PixelText>
+
+            <PixelText size={7} color={COLORS.neonGreen} style={{ marginTop: 4 }}>HP {pHp}/{pMaxHp}</PixelText>
+            <View style={styles.barTrack}>
+              <View style={[styles.barFillHp, { width: `${Math.max(2, Math.min(100, (pHp / pMaxHp) * 100))}%` }]} />
+            </View>
+
+            <PixelText size={7} color={COLORS.neonMagenta} style={{ marginTop: 4 }}>MP {pMp}/{pMaxMp}</PixelText>
+            <View style={styles.barTrack}>
+              <View style={[styles.barFillMp, { width: `${Math.max(2, Math.min(100, (pMp / pMaxMp) * 100))}%` }]} />
+            </View>
+          </View>
+
+          {/* MISSIONS panel */}
+          <View style={styles.panel}>
+            <PixelText size={8} color={COLORS.neonYellow} bold>MISSIONS</PixelText>
+            <PixelText size={7} color={COLORS.text} style={{ marginTop: 4, lineHeight: 11 }}>
+              {missionLine}
+            </PixelText>
+          </View>
+
+          {/* MAP LEGEND panel */}
+          <View style={styles.panel}>
+            <PixelText size={8} color={COLORS.neonGreen} bold>MAP LEGEND</PixelText>
+            <View style={{ marginTop: 4 }}>
+              {legendEntries.map((e) => {
+                const meta = ZONE_META[e.id];
+                if (!meta) return null;
+                return (
+                  <View key={e.id} style={styles.legendRow}>
+                    <View style={[styles.legendSwatch, { backgroundColor: meta.accent + '55', borderColor: meta.accent }]} />
+                    <PixelText size={7} color={COLORS.text}>{e.label}</PixelText>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* AI activity (compact chips) */}
+          {roamers.length > 0 && (
+            <View style={styles.panel}>
+              <PixelText size={8} color={COLORS.neonRed} bold>AI ACTIVITY</PixelText>
+              {roamers.map((r) => {
+                const c =
+                  r.state === 'Chasing' ? COLORS.neonRed
+                    : r.state === 'Alerted' ? COLORS.neonYellow
+                      : r.state === 'Returning' ? COLORS.neonMagenta
+                        : COLORS.neonGreen;
+                return (
+                  <View key={r.uid} style={[styles.sideChip, { borderColor: c }]}>
+                    <PixelText size={6} color={c}>{r.enemyId.replace(/_/g, ' ').toUpperCase()}</PixelText>
+                    <PixelText size={6} color={c} bold>{r.state.toUpperCase()}</PixelText>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Action buttons — relocated from over the viewport */}
+          <View style={{ gap: 6, marginTop: 'auto' }}>
+            <TouchableOpacity
+              style={[styles.sideAction, { borderColor: COLORS.neonMagenta }]}
+              onPress={() => router.push('/registry')}
+              testID="conduit-party"
+            >
+              <PixelText size={9} color={COLORS.neonMagenta} bold>PARTY</PixelText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sideAction, { borderColor: COLORS.textDim }]}
+              onPress={() => router.replace('/game')}
+              testID="conduit-exit"
+            >
+              <PixelText size={9} color={COLORS.textDim} bold>EXIT</PixelText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sideAction, { borderColor: debugOverlay ? COLORS.neonGreen : COLORS.borderHi }]}
+              onPress={() => setDebugOverlay((v) => !v)}
+              testID="conduit-grid-toggle"
+            >
+              <PixelText size={8} color={debugOverlay ? COLORS.neonGreen : COLORS.textDim}>
+                {debugOverlay ? 'GRID ON' : 'GRID OFF'}
+              </PixelText>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* Main backdrop + interactive overlay — locked to camera. */}
-        <View style={{ position: 'absolute', left: -camX, top: -camY }}>
-          {backdrop}
-          {/* Subtle tinted overlay for readability of UI markers */}
+        {/* ═══════════════ TIGHT CAMERA VIEWPORT ═══════════════ */}
+        <View style={{ alignItems: 'center', flex: 1 }}>
           <View
-            pointerEvents="none"
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              width: viewportW,
-              height: viewportH,
-              backgroundColor: 'rgba(4,8,20,0.18)',
-            }}
-          />
-          {triggerMarkers}
-          {gridDebug}
-          {roamers.map(renderRoamer)}
-          {player}
-        </View>
+            style={[styles.viewport, { width: camViewportW, height: camViewportH }]}
+            testID="conduit-viewport"
+          >
+            {/* Parallax depth layer — dimmed darker copy of the backdrop. */}
+            <View style={{ position: 'absolute', left: -parX, top: -parY, opacity: 0.30 }}>
+              <Image
+                source={{ uri: backdropUri }}
+                style={{
+                  width: viewportW * 1.08,
+                  height: (viewportW * 1.08) / BG_ASPECT,
+                }}
+                resizeMode="cover"
+                fadeDuration={0}
+              />
+            </View>
 
-        {/* Foreground scanline (very subtle CRT effect) */}
-        <View pointerEvents="none" style={styles.scanlineOverlay} />
+            {/* Main backdrop + interactive overlay — locked to camera. */}
+            <View style={{ position: 'absolute', left: -camX, top: -camY }}>
+              {backdrop}
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: viewportW,
+                  height: viewportH,
+                  backgroundColor: 'rgba(4,8,20,0.18)',
+                }}
+              />
+              {triggerMarkers}
+              {gridDebug}
+              {roamers.map(renderRoamer)}
+              {player}
+            </View>
+
+            {/* Scanline + vignette */}
+            <View pointerEvents="none" style={styles.scanlineOverlay} />
+
+            {/* Encounter flash overlay (combatLock triggers it) */}
+            {combatLock && (
+              <View pointerEvents="none" style={styles.encounterFlash}>
+                <PixelText size={18} color="#ff2a55" glow bold>! ENGAGED !</PixelText>
+              </View>
+            )}
+          </View>
+
+          {/* Zone toast / hint anchored just below the viewport — fixed
+              height so it never bumps the layout. */}
+          <View style={styles.toastSlot}>
+            {!!zoneToast ? (
+              <View style={[styles.zoneToast, { borderColor: zoneToast.accent }]} testID="zone-toast">
+                <PixelText size={10} color={zoneToast.accent} bold>{zoneToast.label}</PixelText>
+                <PixelText size={9} color={COLORS.text} style={{ marginTop: 2 }}>{zoneToast.flavor}</PixelText>
+              </View>
+            ) : !!hint ? (
+              <View style={styles.hintBar}>
+                <PixelText size={9} color={COLORS.neonGreen}>{hint}</PixelText>
+              </View>
+            ) : (
+              <PixelText size={8} color={COLORS.textDim}>
+                ⓘ Walk into glowing tiles to trigger zone events
+              </PixelText>
+            )}
+          </View>
+        </View>
       </View>
 
-      {/* ZONE TOAST */}
-      {!!zoneToast && (
-        <View style={[styles.zoneToast, { borderColor: zoneToast.accent }]} testID="zone-toast">
-          <PixelText size={10} color={zoneToast.accent} bold>{zoneToast.label}</PixelText>
-          <PixelText size={9} color={COLORS.text} style={{ marginTop: 2 }}>{zoneToast.flavor}</PixelText>
-        </View>
-      )}
-
-      {/* HINT */}
-      {!!hint && !zoneToast && (
-        <View style={styles.hintBar}>
-          <PixelText size={10} color={COLORS.neonGreen}>{hint}</PixelText>
-        </View>
-      )}
-
-      {/* AI STATE CHIPS */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.statusBar}
-        contentContainerStyle={{ gap: 8, paddingHorizontal: 10 }}
-      >
-        {roamers.map((r) => {
-          const c =
-            r.state === 'Chasing' ? COLORS.neonRed
-              : r.state === 'Alerted' ? COLORS.neonYellow
-                : r.state === 'Returning' ? COLORS.neonMagenta
-                  : COLORS.neonGreen;
-          return (
-            <View key={r.uid} style={[styles.stateChip, { borderColor: c }]}>
-              <PixelText size={8} color={c}>{r.enemyId.replace(/_/g, ' ').toUpperCase()}</PixelText>
-              <PixelText size={8} color={c} bold>{r.state.toUpperCase()}</PixelText>
-            </View>
-          );
-        })}
-      </ScrollView>
-
-      {/* CONTROLS */}
-      <View style={styles.controls}>
+      {/* JOYSTICK — centered below */}
+      <View style={styles.joystickWrap}>
         <VirtualJoystick
           onMove={(dx, dy) => { moveDirRef.current = { dx, dy }; }}
           onEnd={() => { moveDirRef.current = { dx: 0, dy: 0 }; }}
         />
-        <View style={{ gap: 8 }}>
-          <PixelButton title="EXIT" onPress={() => router.replace('/game')} color={COLORS.textDim} testID="conduit-exit" />
-          <PixelButton title="PARTY" onPress={() => router.push('/registry')} color={COLORS.neonMagenta} testID="conduit-party" />
-          <TouchableOpacity
-            onPress={() => setDebugOverlay((v) => !v)}
-            style={styles.gridToggle}
-            testID="conduit-grid-toggle"
-          >
-            <PixelText size={8} color={debugOverlay ? COLORS.neonGreen : COLORS.textDim}>
-              {debugOverlay ? 'GRID ON' : 'GRID OFF'}
-            </PixelText>
-          </TouchableOpacity>
-        </View>
       </View>
-
-      <PixelText size={8} color={COLORS.textDim} style={styles.tip}>
-        ⓘ Walk into glowing tiles — START / TROJAN / DATA / CONSOLE / BOSS gates
-      </PixelText>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#04040a', alignItems: 'center' },
-  header: { alignItems: 'center', marginTop: 4, marginBottom: 4 },
+  header: { alignItems: 'center', marginTop: 4, marginBottom: 6 },
+  gameRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    width: '100%',
+    paddingHorizontal: 8,
+    gap: 8,
+  },
+  sidebar: {
+    backgroundColor: 'rgba(8,10,24,0.85)',
+    borderWidth: 2,
+    borderColor: COLORS.neonCyan,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 8,
+    minHeight: 360,
+    boxShadow: '0 0 16px rgba(0,240,255,0.18)',
+  } as any,
+  panel: {
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+  },
+  barTrack: {
+    height: 6,
+    backgroundColor: '#0a0a14',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: 2,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  barFillHp: { height: '100%', backgroundColor: COLORS.neonGreen },
+  barFillMp: { height: '100%', backgroundColor: COLORS.neonMagenta },
+  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginVertical: 1 },
+  legendSwatch: {
+    width: 10,
+    height: 10,
+    borderWidth: 1,
+  },
+  sideChip: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderWidth: 1,
+    marginTop: 3,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  sideAction: {
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+  },
   viewport: {
     overflow: 'hidden',
     borderWidth: 2,
     borderColor: COLORS.neonCyan,
     backgroundColor: '#02030a',
-    boxShadow: '0 0 24px rgba(0,240,255,0.25)',
+    boxShadow: '0 0 24px rgba(0,240,255,0.30)',
     position: 'relative',
   } as any,
   scanlineOverlay: {
     position: 'absolute',
     inset: 0,
     backgroundColor: 'transparent',
-    borderTopWidth: 0,
-    // Diagonal cyber scan accent via box-shadow inset for cheap CRT look.
     boxShadow: 'inset 0 0 80px rgba(0,240,255,0.10), inset 0 0 14px rgba(0,0,0,0.7)',
     pointerEvents: 'none',
+  } as any,
+  encounterFlash: {
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: 'rgba(255,42,85,0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
   } as any,
   playerBox: {
     backgroundColor: COLORS.neonCyan,
@@ -653,50 +813,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  zoneToast: {
+  toastSlot: {
     marginTop: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  zoneToast: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderWidth: 2,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    maxWidth: 360,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    maxWidth: 320,
   },
   hintBar: {
-    marginTop: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: COLORS.neonGreen,
     backgroundColor: 'rgba(0,255,128,0.08)',
   },
-  statusBar: { marginTop: 8, maxHeight: 26 },
-  stateChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  controls: {
-    flexDirection: 'row',
+  joystickWrap: {
+    marginTop: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     width: '100%',
-    paddingHorizontal: 20,
-    marginTop: 10,
-  },
-  gridToggle: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: COLORS.borderHi,
-    alignItems: 'center',
-  },
-  tip: {
-    marginTop: 6,
-    marginBottom: 4,
-    textAlign: 'center',
-    paddingHorizontal: 12,
   },
 });
+
