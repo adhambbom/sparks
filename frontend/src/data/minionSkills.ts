@@ -29,23 +29,23 @@ export type MinionSkill = {
 export const MINION_SKILLS: Record<string, MinionSkill> = {
   data_leak: {
     id: 'data_leak',
-    name: 'Data Leak',
+    name: 'Malware Blitz',
     power: 1.2,
     status: 'defense_down',
     statusTurns: 3,
-    desc: 'Cryptic siphon — Deals 120% atk and weakens target DEF.',
+    desc: 'Cryptic siphon — 120% atk; weakens target DEF.',
   },
   ddos_overload: {
     id: 'ddos_overload',
-    name: 'DDOS Overload',
+    name: 'DDOS Barrage',
     power: 0.8,
     status: 'stun',
     statusTurns: 1,
-    desc: 'Flood the bus — 80% atk, target loses next turn.',
+    desc: 'Flood the bus — 80% atk; target loses next turn.',
   },
   firewall_spike: {
     id: 'firewall_spike',
-    name: 'Firewall Spike',
+    name: 'Trojan Injector',
     power: 1.0,
     status: 'firewall_up',
     statusTurns: 2,
@@ -53,11 +53,11 @@ export const MINION_SKILLS: Record<string, MinionSkill> = {
   },
   packet_storm: {
     id: 'packet_storm',
-    name: 'Packet Storm',
+    name: 'System Reboot',
     power: 1.5,
     status: 'burn',
     statusTurns: 2,
-    desc: 'Burst flood. Deals 150% atk plus light burn.',
+    desc: 'Burst flood — 150% atk + light burn.',
   },
 };
 

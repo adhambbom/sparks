@@ -614,13 +614,14 @@ export default function CombatScreen() {
         </Animated.View>
       </View>
 
-      {/* (3) BOTTOM PANEL — switches between player stats and "DEPLOYED MINION"
-              view per the ActiveBattleViewport blueprint. The player card is
-              fully replaced when a minion is on the field so the player
-              clearly understands the swap.
-              + (4) ACTION MENU directly underneath. */}
+      {/* (3) BOTTOM PANEL — three modes:
+              1. Default → player stats card
+              2. Minion deployed (any non-skill panel) → "OMNI-REGISTRY / DEPLOYED MINION" header
+              3. Minion deployed + skills panel → full CyborgBattleMovePanel takeover (the
+                 player/deploy header is hidden so the move grid + diagnostics fill the bottom)
+              + (4) ACTION MENU directly underneath (suppressed in mode 3). */}
       <View style={styles.bottomHud}>
-        {deployedMinion ? (
+        {panel === 'minionSkills' && deployedMinion ? null : deployedMinion ? (
           // ── DEPLOYED-MINION HEADER (matches uploaded UI mockup) ──────────
           // Left col  → OMNI-REGISTRY + species line label (e.g. "Phreak").
           // Right col → DEPLOYED MINION + minion name (yellow accent).
@@ -768,33 +769,99 @@ export default function CombatScreen() {
           </ScrollView>
         )}
 
-        {/* ── MINION SKILL picker (after deploy) ──────────────────────── */}
-        {panel === 'minionSkills' && deployedMinion && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
-            {deployedMinion.skills.map((sId) => {
-              const sk = getMinionSkillView(sId);
-              if (!sk) return null;
-              return (
+        {/* ── MINION SKILL picker — full bottom-takeover (CyborgBattleMovePanel) ──
+            Faithful port of the spec: LEFT half = 2×2 numbered move grid with
+            cyan glow, RIGHT half = stacked OMNI-REGISTRY + system diagnostics
+            telemetry. Replaces the standard action grid entirely while a
+            minion is acting, mirroring classic Pokémon move-select state. */}
+        {panel === 'minionSkills' && deployedMinion && (() => {
+          // Order of slots always follows the canonical 4-move tier ladder so
+          // slot index → keyboard "1.MALWARE 2.DDOS 3.TROJAN 4.SYSTEM" matches
+          // the mockup regardless of which subset this minion actually knows.
+          const allSlots: string[] = ['data_leak', 'ddos_overload', 'firewall_spike', 'packet_storm'];
+          const known = new Set(deployedMinion.skills);
+          // Live diagnostics derived from runtime state:
+          const integrityPct = Math.round((player.hp / Math.max(1, player.maxHp)) * 100);
+          const coreTemp =
+            firewallTurns > 0 ? 'FROZEN' :
+            integrityPct < 30 ? 'CRITICAL' :
+            integrityPct < 60 ? 'ELEVATED' : 'OPTIMAL';
+          const linkStatus = busy ? 'BUFFERING' : 'ACTIVE';
+          return (
+            <View style={styles.cyborgPanel}>
+              {/* LEFT — 2×2 move grid */}
+              <View style={styles.cyborgMoveGrid}>
+                {[0, 1, 2, 3].map((idx) => {
+                  const sId = allSlots[idx];
+                  const sk = getMinionSkillView(sId);
+                  const locked = !known.has(sId) || !sk;
+                  return (
+                    <TouchableOpacity
+                      key={sId}
+                      disabled={locked}
+                      onPress={() => sk && playerMinionSkill(sk.id)}
+                      style={[styles.cyborgMoveCell, locked && styles.cyborgMoveCellLocked]}
+                      testID={`combat-minion-skill-${sId}`}
+                    >
+                      <PixelText size={11} color={locked ? COLORS.textDim : COLORS.neonGreen} bold>
+                        {idx + 1}. {sk ? sk.name.toUpperCase() : '— LOCKED —'}
+                      </PixelText>
+                      {!locked && sk && (
+                        <PixelText size={8} color={COLORS.textDim} style={{ marginTop: 3 }}>
+                          ×{sk.power} pwr
+                        </PixelText>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+                {/* Plus-sign cross divider for the 2×2 cyborg grid effect. */}
+                <View pointerEvents="none" style={styles.cyborgGridCrossH} />
+                <View pointerEvents="none" style={styles.cyborgGridCrossV} />
+              </View>
+
+              {/* RIGHT — stacked telemetry */}
+              <View style={styles.cyborgRightCol}>
+                {/* Top frame: OMNI-REGISTRY */}
+                <View style={styles.cyborgRegistryFrame}>
+                  <PixelText size={11} color={COLORS.neonGreen} bold>OMNI-REGISTRY</PixelText>
+                  <PixelText size={10} color={COLORS.text}>Synthetica</PixelText>
+                  <View style={{ height: 4 }} />
+                  <PixelText size={9} color={COLORS.text} bold>DEPLOYED MINION:</PixelText>
+                  <PixelText size={9} color={COLORS.text}>[{deployedMinion.name.toUpperCase()}]</PixelText>
+                </View>
+                {/* Bottom frame: system diagnostics terminal */}
+                <View style={styles.cyborgDiagFrame}>
+                  <PixelText size={8} color={COLORS.neonGreen}>
+                    CORE TEMP: {coreTemp}
+                  </PixelText>
+                  <PixelText size={8} color={COLORS.neonGreen}>
+                    UNIT INTEGRITY: {integrityPct}%
+                  </PixelText>
+                  <PixelText size={8} color={COLORS.neonGreen}>
+                    COMMAND LINK: {linkStatus}
+                  </PixelText>
+                  {enemyDefDebuff > 0 && (
+                    <PixelText size={8} color={COLORS.neonMagenta}>
+                      INTRUSION: ENEMY DEF -30% ({enemyDefDebuff}T)
+                    </PixelText>
+                  )}
+                  {enemyStun > 0 && (
+                    <PixelText size={8} color={COLORS.neonMagenta}>
+                      LOCKDOWN: STUN {enemyStun}T
+                    </PixelText>
+                  )}
+                </View>
+                {/* RECALL button — always visible at the bottom of the panel */}
                 <TouchableOpacity
-                  key={sId}
-                  style={[styles.skillBtn, { borderColor: COLORS.neonMagenta }]}
-                  onPress={() => playerMinionSkill(sId)}
-                  testID={`combat-minion-skill-${sId}`}
+                  style={styles.cyborgRecallBtn}
+                  onPress={() => { setDeployedMinion(null); setPanel('main'); sfx.cancel(); }}
                 >
-                  <PixelText size={11} color={COLORS.neonMagenta} bold>{sk.name.toUpperCase()}</PixelText>
-                  <PixelText size={9} color={COLORS.textDim}>×{sk.power} pwr</PixelText>
-                  <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>{sk.desc}</PixelText>
+                  <PixelText size={9} color={COLORS.neonRed} bold>✕ RECALL</PixelText>
                 </TouchableOpacity>
-              );
-            })}
-            <PixelButton
-              title="✕ RECALL"
-              onPress={() => { setDeployedMinion(null); setPanel('main'); }}
-              color={COLORS.textDim}
-              size="sm"
-            />
-          </ScrollView>
-        )}
+              </View>
+            </View>
+          );
+        })()}
 
         {panel === 'skills' && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
@@ -920,6 +987,78 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: 8,
+  },
+  // ─── Cyborg Battle Move Panel (full takeover when picking minion skills) ───
+  // Left half: 2×2 numbered move grid (cyan glow, green text — mockup spec).
+  // Right half: stacked OMNI-REGISTRY card + diagnostic terminal frame.
+  cyborgPanel: {
+    flexDirection: 'row',
+    gap: 6,
+    width: '100%',
+  },
+  cyborgMoveGrid: {
+    flex: 1.15,
+    aspectRatio: 1.05,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    backgroundColor: '#001a2a',
+    borderWidth: 2,
+    borderColor: COLORS.neonCyan,
+    // Subtle cyan glow ring per mockup
+    shadowColor: COLORS.neonCyan,
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  cyborgMoveCell: {
+    width: '50%',
+    height: '50%',
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cyborgMoveCellLocked: {
+    opacity: 0.4,
+  },
+  // Plus-sign cross dividers — give the grid the segmented HUD look.
+  cyborgGridCrossH: {
+    position: 'absolute',
+    left: 4, right: 4, top: '50%',
+    height: 1.5,
+    backgroundColor: COLORS.neonCyan,
+    opacity: 0.7,
+  },
+  cyborgGridCrossV: {
+    position: 'absolute',
+    top: 4, bottom: 4, left: '50%',
+    width: 1.5,
+    backgroundColor: COLORS.neonCyan,
+    opacity: 0.7,
+  },
+  cyborgRightCol: {
+    flex: 1,
+    gap: 6,
+  },
+  cyborgRegistryFrame: {
+    backgroundColor: '#0a1a0a',
+    borderWidth: 2,
+    borderColor: COLORS.neonGreen,
+    padding: 8,
+    minHeight: 70,
+  },
+  cyborgDiagFrame: {
+    flex: 1,
+    backgroundColor: '#0a1a0a',
+    borderWidth: 2,
+    borderColor: COLORS.neonGreen,
+    padding: 8,
+  },
+  cyborgRecallBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.neonRed,
+    paddingVertical: 6,
+    alignItems: 'center',
+    backgroundColor: '#1a0a0a',
   },
   // Dark elliptical ground shadow under each enemy sprite
   groundShadow: {
