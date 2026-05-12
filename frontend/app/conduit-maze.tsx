@@ -161,6 +161,9 @@ export default function ConduitMazeScreen() {
   const triggeredRef = useRef(triggeredZones);
   useEffect(() => { triggeredRef.current = triggeredZones; }, [triggeredZones]);
 
+  // Development-only collision grid overlay (tree-shaken from
+  // production bundles via __DEV__). Toggle via the small button
+  // at the bottom or by pressing the 'g' key on web.
   const [debugOverlay, setDebugOverlay] = useState(false);
   const [hint, setHint] = useState<string>('▸ INFILTRATING THE CONDUIT MAZE…');
 
@@ -216,7 +219,7 @@ export default function ConduitMazeScreen() {
       else if (e.key === 'ArrowDown' || e.key === 's') tryMove(0, 1);
       else if (e.key === 'ArrowLeft' || e.key === 'a') tryMove(-1, 0);
       else if (e.key === 'ArrowRight' || e.key === 'd') tryMove(1, 0);
-      else if (e.key === 'g') setDebugOverlay((v) => !v); // toggle grid overlay
+      else if (__DEV__ && e.key === 'g') setDebugOverlay((v) => !v); // dev-only grid toggle
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -695,16 +698,18 @@ export default function ConduitMazeScreen() {
           )}
         </View>
 
-        {/* Tiny GRID toggle (level-design helper) */}
-        <TouchableOpacity
-          onPress={() => setDebugOverlay((v) => !v)}
-          style={styles.gridToggle}
-          testID="conduit-grid-toggle"
-        >
-          <PixelText size={7} color={debugOverlay ? COLORS.neonGreen : COLORS.textDim}>
-            {debugOverlay ? '[ GRID ON ]' : '[ GRID OFF ]'}
-          </PixelText>
-        </TouchableOpacity>
+        {/* Dev-only collision grid toggle — tree-shaken from release builds. */}
+        {__DEV__ && (
+          <TouchableOpacity
+            onPress={() => setDebugOverlay((v) => !v)}
+            style={styles.gridToggle}
+            testID="conduit-grid-toggle"
+          >
+            <PixelText size={7} color={debugOverlay ? COLORS.neonGreen : COLORS.textDim}>
+              {debugOverlay ? '[ GRID ON ]' : '[ GRID OFF ]'}
+            </PixelText>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* ════════════ CONTROLS — same as Floor 1 ════════════ */}
