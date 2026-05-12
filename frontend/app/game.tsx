@@ -18,6 +18,7 @@ import { ActiveSkillPanel } from '../src/components/ActiveSkillPanel';
 import { useGame } from '../src/contexts/GameContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { sfx } from '../src/utils/audio';
+import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicMinionRenderer';
 
 const TILE = 38;
 const SPEED = 12; // pixels per frame (was 9 → another +33% on the overworld walk)
@@ -197,15 +198,21 @@ export default function GameScreen() {
       // Initialise camera to the player so we don't pan-in from (0,0) on load.
       camRef.current = { x: posRef.current.px, y: posRef.current.py };
       lastTileRef.current = { x: tx, y: ty };
-      // Spawn 3 scout roamers + 1 Juggernaut mini-boss patrolling the corridors
+      // Spawn a mixed roster of academy roamers — legacy tinkerers PLUS the
+      // new Quantum Minion species (phreak/vrghost/mech) so the corridors
+      // feel populated with the captureable enemies the player will meet.
       const occupied = new Set<string>();
       const placed: Roamer[] = [];
-      // 3 Clockwork Scouts (random walkable spots)
-      for (let i = 0; i < 3; i++) {
+      // ── Roaming roster ─────────────────────────────────────────────────
+      // Pull from the academy encounter pool so the world stays in-sync with
+      // ENCOUNTER_POOLS.academy (which already includes phreak_1 / vrghost_1).
+      const academySpawnIds = ['tinkerer_drone', 'phreak_1', 'vrghost_1', 'mech_1', 'phreak_2', 'vrghost_2'];
+      for (let i = 0; i < 6; i++) {
         const spot = randomFloorTile(tx, ty, occupied);
         if (!spot) break;
         occupied.add(`${spot.x},${spot.y}`);
-        placed.push({ uid: `scout_${Date.now()}_${i}`, enemyId: 'tinkerer_drone', x: spot.x, y: spot.y });
+        const enemyId = academySpawnIds[i % academySpawnIds.length];
+        placed.push({ uid: `roamer_${Date.now()}_${i}`, enemyId, x: spot.x, y: spot.y });
       }
       // 1 Juggernaut mini-boss patrolling the throne approach corridor (rows 5-9, mid columns)
       let jugSpot: { x: number; y: number } | null = null;
@@ -219,7 +226,10 @@ export default function GameScreen() {
       }
       if (jugSpot) {
         occupied.add(`${jugSpot.x},${jugSpot.y}`);
-        placed.push({ uid: `juggernaut_${Date.now()}`, enemyId: 'tesla_drone', x: jugSpot.x, y: jugSpot.y, boss: true });
+        // Use a high-tier Quantum Minion as the mini-boss so its unique
+        // sprite shows up in the world too — far more interesting visually
+        // than the legacy tesla_drone scout silhouette.
+        placed.push({ uid: `juggernaut_${Date.now()}`, enemyId: 'mech_3', x: jugSpot.x, y: jugSpot.y, boss: true });
       }
       roamersRef.current = placed;
       setRoamers(placed);
@@ -833,12 +843,20 @@ export default function GameScreen() {
               </View>
             );
           })}
-          {/* Roaming enemies — Clockwork Scouts and Juggernaut mini-boss.
-              FULL sprite is rendered (no clip + procedural-leg overlay). The AI sprite
-              already includes legs. We add a subtle bob/sway transform for life. */}
+          {/* Roaming enemies — academy scouts, Quantum Minions (phreak/vrghost/mech),
+              and a mech mini-boss. The sprite is resolved dynamically per-roamer
+              so each species shows its own art in the overworld.  */}
           {roamers.map((r) => {
             const isBoss = r.boss;
-            const spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
+            // Sprite priority: Quantum sheet (if mapped) → enemyJuggernaut (boss / tier>=3)
+            // → enemyScout (default). This mirrors combat.tsx's `resolveDeployedMinionUri`
+            // so a Phreak roamer in the world looks identical to the one you fight.
+            let spriteUri: string;
+            if (hasMinionSprite(r.enemyId)) {
+              spriteUri = resolveMinionSpriteUri(r.enemyId) || SPRITE_ASSETS.enemyScout;
+            } else {
+              spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
+            }
             // Pokemon-Emerald-style scale: enemies are ~1 tile (scout) / ~1.3 tile (boss).
             const W = isBoss ? TILE * 1.30 : TILE * 1.05;
             const H = isBoss ? TILE * 1.30 : TILE * 1.05;
