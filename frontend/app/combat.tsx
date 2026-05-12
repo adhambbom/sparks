@@ -536,6 +536,31 @@ export default function CombatScreen() {
           ADHAMB floats BOTTOM-RIGHT. Stage uses absolute positioning inside a
           relative container. */}
       <View style={styles.stage}>
+        {/* ── Cyborg battle background ────────────────────────────────────
+            Layered effect: dark navy base → perspective horizon glow →
+            faint scanline texture → cyan grid lines (vertical + horizontal).
+            All overlays are pointerEvents="none" so combat hit-areas stay
+            unaffected. Cheap to render: no images, no SVG — just <View>s. */}
+        <View pointerEvents="none" style={styles.cyborgBgBase} />
+        <View pointerEvents="none" style={styles.cyborgBgHorizon} />
+        <View pointerEvents="none" style={styles.cyborgBgScan} />
+        {/* Vertical grid lines */}
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <View
+            key={`vbg-${i}`}
+            pointerEvents="none"
+            style={[styles.cyborgGridV, { left: `${(i + 1) * (100 / 7)}%` }]}
+          />
+        ))}
+        {/* Horizontal grid lines — denser near the "horizon" for depth. */}
+        {[0.25, 0.4, 0.52, 0.62, 0.72, 0.82, 0.92].map((p, i) => (
+          <View
+            key={`hbg-${i}`}
+            pointerEvents="none"
+            style={[styles.cyborgGridH, { top: `${p * 100}%` }]}
+          />
+        ))}
+
         {/* Phase change flash */}
         {phaseFlash && <View style={styles.phaseFlash} pointerEvents="none" />}
 
@@ -976,6 +1001,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     position: 'relative',
+    overflow: 'hidden',  // clip cyborg-bg children to the stage bounds
   },
   // Enemy block — pinned TOP-LEFT (Pokemon-Emerald style).
   enemyAnchor: {
@@ -1031,6 +1057,44 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: 8,
+  },
+  // ─── Cyborg battle background (multi-layer effect) ─────────────────
+  // Sits behind every combat element via absolute positioning. Pure-View
+  // implementation (no images, no SVG) → zero asset cost, scales perfectly.
+  cyborgBgBase: {
+    position: 'absolute',
+    top: 0, bottom: 0, left: 0, right: 0,
+    backgroundColor: '#03060f',  // deep cyber navy
+  },
+  // Bright horizon ring fades into the dark — fakes a vanishing-point glow.
+  cyborgBgHorizon: {
+    position: 'absolute',
+    left: 0, right: 0,
+    top: '38%',
+    height: 90,
+    backgroundColor: COLORS.neonCyan,
+    opacity: 0.06,
+  },
+  // Subtle scanline tint band — gives the CRT look without per-pixel cost.
+  cyborgBgScan: {
+    position: 'absolute',
+    top: 0, bottom: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(0, 255, 255, 0.02)',
+    opacity: 0.7,
+  },
+  // Cyan grid verticals — 6 lines evenly spread.
+  cyborgGridV: {
+    position: 'absolute',
+    top: 0, bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(0, 200, 255, 0.18)',
+  },
+  // Cyan grid horizontals — denser near the "horizon" for perspective.
+  cyborgGridH: {
+    position: 'absolute',
+    left: 0, right: 0,
+    height: 1,
+    backgroundColor: 'rgba(0, 200, 255, 0.16)',
   },
   // ─── Cyborg Battle Move Panel (full takeover when picking minion skills) ───
   // Left half: 2×2 numbered move grid via explicit rows (each row = 50% height,
