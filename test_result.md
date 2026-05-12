@@ -107,6 +107,76 @@ user_problem_statement: |
   overworld ADHAMB sprite aesthetic, move/animate the floating damage numbers,
   and resize/reposition the battle log so it stops crowding the stage.
 
+  Plus: verify security hardening of /api/auth/automation-bypass — staging
+  bypass works (200), production lockdown returns 403 + SECURITY ALERT log,
+  and .env is restored to staging mode after the test.
+
+backend:
+  - task: "Automation bypass security hardening — /api/auth/automation-bypass"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ALL 3 SCENARIOS PASS.
+
+          SCENARIO 1 (ENABLE_AUTOMATION_BYPASS=1, staging):
+            POST /api/auth/automation-bypass → HTTP 200
+            Body: {"id":"6a02b559f8d3e8638455a14a",
+                   "email":"playwright@nexus.test",
+                   "name":"PlaywrightRunnerNode01",
+                   "role":"user",
+                   "access_token":"<JWT>",
+                   "redirect":"/conduit-maze"}
+            Cookies set: access_token (httpOnly), refresh_token (httpOnly).
+            Follow-up GET /api/auth/me with the session cookie → 200 with
+            {"email":"playwright@nexus.test","name":"PlaywrightRunnerNode01",
+             "role":"user", ...}.
+
+          SCENARIO 2 (ENABLE_AUTOMATION_BYPASS=0, backend restarted, production):
+            POST /api/auth/automation-bypass → HTTP 403
+            Body: {"detail":{"error":"Access Denied",
+                             "message":"Automation bypass is strictly
+                                        disabled in production environments."}}
+            Backend log line captured (from /var/log/supervisor/backend.err.log):
+              2026-05-12 06:13:11,937 - WARNING - SECURITY ALERT: unauthorized
+              access attempt to /api/auth/automation-bypass in env=development
+              from ip=10.79.131.92 ua='backend-tester/TEST-MARKER-634c0fe4'
+
+          SCENARIO 3 (restore staging):
+            .env flipped back to ENABLE_AUTOMATION_BYPASS=1, backend restarted,
+            POST /api/auth/automation-bypass → 200 again. Final .env state
+            verified: `ENABLE_AUTOMATION_BYPASS=1` (preview Playwright runs
+            continue to work).
+
+  - task: "Regression — static sprites + register + leaderboard"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          • GET /api/static/sprites/conduit_maze_bg.png → 200, image/png,
+            1,490,112 bytes (the new backdrop image serves correctly).
+          • POST /api/auth/register with a fresh @example.com email/password
+            → 200 with access_token and matching email in the body.
+            NOTE: pydantic EmailStr rejects RFC 6761 reserved TLDs (e.g.
+            `@nexus.test`) — this is expected validator behaviour, not a bug.
+          • GET /api/game/leaderboard → 200 with leaderboard array (the actual
+            route in server.py). The review request mentioned
+            `/api/leaderboard/arena` but no such route exists in server.py;
+            confirmed it 404s. Treating this as a typo in the review spec
+            since `/api/game/leaderboard` is fully functional.
+
 frontend:
   - task: "Battle Scene sprite + floater + log polish"
     implemented: true
@@ -248,12 +318,51 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Battle Scene sprite + floater + log polish"
+    - "Automation bypass security hardening — /api/auth/automation-bypass"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
+  - agent: "testing"
+    message: |
+      Automation-bypass security hardening verified end-to-end.
+
+      • Scenario 1 (staging, ENABLE_AUTOMATION_BYPASS=1):
+          POST /api/auth/automation-bypass → 200
+          body has access_token, email=playwright@nexus.test,
+          name=PlaywrightRunnerNode01, redirect=/conduit-maze
+          httpOnly access_token + refresh_token cookies set.
+          Subsequent GET /api/auth/me → 200 with the playwright user.
+
+      • Scenario 2 (production-mode, ENABLE_AUTOMATION_BYPASS=0,
+        backend restarted):
+          POST /api/auth/automation-bypass → 403
+          body = {"detail":{"error":"Access Denied",
+                            "message":"Automation bypass is strictly
+                                       disabled in production environments."}}
+          Backend log line captured (backend.err.log):
+            2026-05-12 06:13:11,937 - WARNING - SECURITY ALERT: unauthorized
+            access attempt to /api/auth/automation-bypass in env=development
+            from ip=10.79.131.92 ua='backend-tester/TEST-MARKER-634c0fe4'
+
+      • Scenario 3 (restore): .env now has ENABLE_AUTOMATION_BYPASS=1,
+        backend restarted, endpoint returns 200 again. Preview Playwright
+        runs will continue to work.
+
+      Regression checks:
+        - GET /api/static/sprites/conduit_maze_bg.png → 200 (1.49 MB image/png).
+        - POST /api/auth/register with @example.com email → 200 + token.
+          (Initial run failed with @nexus.test because pydantic EmailStr
+          rejects RFC 6761 reserved TLDs — tester-side bug, fixed.)
+        - GET /api/game/leaderboard → 200 with leaderboard list.
+          The review request mentioned `/api/leaderboard/arena` which does
+          NOT exist in server.py (404). Treating it as a spec typo — the
+          actual route `/api/game/leaderboard` is healthy.
+
+      No code changes were made; only /app/backend/.env was toggled and
+      restored, and backend was restarted to pick up the env flips.
+
   - agent: "main"
     message: |
       Battle Scene polish landed. Three changes shipped:

@@ -254,21 +254,59 @@ async def login(req: LoginRequest, response: Response):
 # AUTOMATION BYPASS — Port of LoginSequenceController.BypassWebLoginForAutomatedTesting
 # Used by Playwright/E2E test runners to skip the login UI entirely
 # and land directly in the game with a seeded character.
-# Gated by ENABLE_AUTOMATION_BYPASS=1 (defaults on for non-prod).
+#
+# ⚠ SECURITY: This endpoint MUST be disabled in production. The
+# environment flag is re-evaluated on every request so flipping
+# `ENABLE_AUTOMATION_BYPASS=0` in the production .env takes effect
+# immediately without a redeploy.
 # ────────────────────────────────────────────────────────────
-AUTOMATION_BYPASS_ENABLED = os.environ.get("ENABLE_AUTOMATION_BYPASS", "1") == "1"
 AUTOMATION_EMAIL = "playwright@nexus.test"
 AUTOMATION_PASSWORD_HASH = None  # lazily set
 
+def _is_automation_bypass_enabled() -> bool:
+    """Re-read the env flag at request time — never cache.
+
+    A production rollout sets `ENABLE_AUTOMATION_BYPASS=0` which
+    causes every call to this endpoint to be rejected with 403.
+    """
+    return os.environ.get("ENABLE_AUTOMATION_BYPASS", "0") == "1"
+
+
+def _current_node_env() -> str:
+    """Human-readable environment label for audit logs."""
+    return os.environ.get("NODE_ENV") or os.environ.get("APP_ENV") or "production"
+
+
 @api.post("/auth/automation-bypass")
-async def automation_bypass(response: Response):
+async def automation_bypass(request: Request, response: Response):
     """Inject a fully-authorised mock developer session for automated tests.
 
     Auto-seeds the playwright user and a default character on first call.
     Returns a real signed JWT so subsequent /api/* calls work end-to-end.
+
+    GATED — disabled by default. The deployment matrix is:
+      • .env.production → ENABLE_AUTOMATION_BYPASS=0 (locked)
+      • .env.staging    → ENABLE_AUTOMATION_BYPASS=1 (Playwright runs)
     """
-    if not AUTOMATION_BYPASS_ENABLED:
-        raise HTTPException(status_code=404, detail="Not found")
+    if not _is_automation_bypass_enabled():
+        # SECURITY ALERT — log the unauthorized attempt with context so
+        # ops can spot probing in production access logs.
+        client_ip = request.client.host if request.client else "?"
+        ua = request.headers.get("user-agent", "?")[:120]
+        node_env = _current_node_env()
+        logging.warning(
+            "SECURITY ALERT: unauthorized access attempt to /api/auth/automation-bypass "
+            "in env=%s from ip=%s ua=%r",
+            node_env, client_ip, ua,
+        )
+        # Match the spec's response shape (403 Access Denied JSON).
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "Access Denied",
+                "message": "Automation bypass is strictly disabled in production environments.",
+            },
+        )
 
     global AUTOMATION_PASSWORD_HASH
     user = await db.users.find_one({"email": AUTOMATION_EMAIL})
