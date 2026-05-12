@@ -9,7 +9,7 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { useGame } from '../src/contexts/GameContext';
 
 export default function TitleScreen() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, automation, automationRedirect } = useAuth();
   const { loadFromServer } = useGame();
   const [checking, setChecking] = useState(false);
   const [hasSave, setHasSave] = useState(false);
@@ -30,6 +30,19 @@ export default function TitleScreen() {
       }
     })();
   }, [user, loadFromServer]);
+
+  // ── Automation / Playwright fast-path ────────────────────────────
+  // Per LoginSequenceController.cs: skip the title screen and drop the
+  // runner straight into the requested scene (default: Conduit Maze Lv2B).
+  useEffect(() => {
+    if (loading) return;
+    if (!automation) return;
+    if (!user) return;
+    const target = automationRedirect || '/conduit-maze';
+    // eslint-disable-next-line no-console
+    console.log('[automation] redirecting to', target);
+    router.replace(target as any);
+  }, [loading, automation, user, automationRedirect]);
 
   const onContinue = () => router.replace('/game');
   const onNewGame = () => router.replace('/character-create');

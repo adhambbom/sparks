@@ -250,6 +250,70 @@ async def login(req: LoginRequest, response: Response):
         "access_token": access,
     }
 
+# ────────────────────────────────────────────────────────────
+# AUTOMATION BYPASS — Port of LoginSequenceController.BypassWebLoginForAutomatedTesting
+# Used by Playwright/E2E test runners to skip the login UI entirely
+# and land directly in the game with a seeded character.
+# Gated by ENABLE_AUTOMATION_BYPASS=1 (defaults on for non-prod).
+# ────────────────────────────────────────────────────────────
+AUTOMATION_BYPASS_ENABLED = os.environ.get("ENABLE_AUTOMATION_BYPASS", "1") == "1"
+AUTOMATION_EMAIL = "playwright@nexus.test"
+AUTOMATION_PASSWORD_HASH = None  # lazily set
+
+@api.post("/auth/automation-bypass")
+async def automation_bypass(response: Response):
+    """Inject a fully-authorised mock developer session for automated tests.
+
+    Auto-seeds the playwright user and a default character on first call.
+    Returns a real signed JWT so subsequent /api/* calls work end-to-end.
+    """
+    if not AUTOMATION_BYPASS_ENABLED:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    global AUTOMATION_PASSWORD_HASH
+    user = await db.users.find_one({"email": AUTOMATION_EMAIL})
+    if not user:
+        if AUTOMATION_PASSWORD_HASH is None:
+            AUTOMATION_PASSWORD_HASH = hash_password("playwright-automation-mock")
+        user_doc = {
+            "email": AUTOMATION_EMAIL,
+            "password_hash": AUTOMATION_PASSWORD_HASH,
+            "name": "PlaywrightRunnerNode01",
+            "role": "user",
+            "created_at": datetime.now(timezone.utc),
+        }
+        result = await db.users.insert_one(user_doc)
+        user_id = str(result.inserted_id)
+        # Seed a starter character so all gameplay routes load.
+        state = default_game_state("PlaywrightRunner", "obsidian")
+        # Land directly in the Conduit Maze (Level 2B) per the spec.
+        state["world"]["currentMap"] = "conduit_maze"
+        state["world"]["position"] = {"x": 2, "y": 1}
+        await db.game_saves.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "user_id": user_id,
+                "current": state,
+                "checkpoint": state,
+                "updated_at": datetime.now(timezone.utc),
+            }},
+            upsert=True,
+        )
+    else:
+        user_id = str(user["_id"])
+
+    access = create_access_token(user_id, AUTOMATION_EMAIL)
+    refresh = create_refresh_token(user_id)
+    set_auth_cookies(response, access, refresh)
+    return {
+        "id": user_id,
+        "email": AUTOMATION_EMAIL,
+        "name": "PlaywrightRunnerNode01",
+        "role": "user",
+        "access_token": access,
+        "redirect": "/conduit-maze",
+    }
+
 @api.post("/auth/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")

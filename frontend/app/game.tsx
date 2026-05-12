@@ -524,11 +524,10 @@ export default function GameScreen() {
       return;
     }
     if (tile === 15) {
-      // Spiral staircase — leads to the next dungeon level. Sealed for now
-      // (level 2 not implemented yet); show flavour hint and play a soft thud.
-      sfx.cancel();
-      setHint('▼ STAIRS — Sealed by the Glitch. Return after the boss.');
-      setTimeout(() => setHint(''), 2200);
+      // Spiral staircase — descend into Level 2B (Conduit Maze).
+      sfx.confirm();
+      setHint('▼ DESCENDING — Conduit Maze unlocked');
+      setTimeout(() => router.replace('/conduit-maze'), 300);
       return;
     }
     // Find nearby NPC (within 1 tile)
