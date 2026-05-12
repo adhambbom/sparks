@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ActivityIndicator, ScrollView, Modal, TouchableOpacity, Image, Platform } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { COLORS, ACADEMY_MAP, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
+import { COLORS, ACADEMY_MAP, CONDUIT_MAZE, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
 import ConcreteFloor from '../src/components/ConcreteFloor';
 import Drawbridge from '../src/components/Drawbridge';
@@ -19,6 +19,7 @@ import { useGame } from '../src/contexts/GameContext';
 import { useAuth } from '../src/contexts/AuthContext';
 import { sfx } from '../src/utils/audio';
 import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicMinionRenderer';
+import { stepWildAI, makeAIRoamer, AIRoamer, AI_CONFIG } from '../src/systems/WildMinionAI';
 
 const TILE = 38;
 const SPEED = 12; // pixels per frame (was 9 → another +33% on the overworld walk)
@@ -38,7 +39,11 @@ type Dialog = {
    *  finish their pitch. */
   onComplete?: () => void;
 } | null;
-type Roamer = { uid: string; enemyId: string; x: number; y: number; chasing?: boolean; boss?: boolean };
+// Roamer = base record + the AI fields from WildMinionAI. We keep the
+// existing fields (uid, enemyId, x, y, boss) so all the spawn/render code
+// stays working, and add `state/anchor/wanderCooldown/facing` so the AI
+// state machine can do its thing.
+type Roamer = AIRoamer & { chasing?: boolean };
 
 function isFloor(x: number, y: number, brokenBarrels?: Set<string>): boolean {
   // Backward-compatible delegate for spawn helpers — single-tile check.
@@ -212,7 +217,7 @@ export default function GameScreen() {
         if (!spot) break;
         occupied.add(`${spot.x},${spot.y}`);
         const enemyId = academySpawnIds[i % academySpawnIds.length];
-        placed.push({ uid: `roamer_${Date.now()}_${i}`, enemyId, x: spot.x, y: spot.y });
+        placed.push(makeAIRoamer(`roamer_${Date.now()}_${i}`, enemyId, spot.x, spot.y, false));
       }
       // 1 Juggernaut mini-boss patrolling the throne approach corridor (rows 5-9, mid columns)
       let jugSpot: { x: number; y: number } | null = null;
@@ -229,7 +234,7 @@ export default function GameScreen() {
         // Use a high-tier Quantum Minion as the mini-boss so its unique
         // sprite shows up in the world too — far more interesting visually
         // than the legacy tesla_drone scout silhouette.
-        placed.push({ uid: `juggernaut_${Date.now()}`, enemyId: 'mech_3', x: jugSpot.x, y: jugSpot.y, boss: true });
+        placed.push(makeAIRoamer(`juggernaut_${Date.now()}`, 'mech_3', jugSpot.x, jugSpot.y, true));
       }
       roamersRef.current = placed;
       setRoamers(placed);
@@ -273,48 +278,29 @@ export default function GameScreen() {
       if (engagingRef.current) return;
       const cur = roamersRef.current;
       if (cur.length === 0) return;
-      const occupied = new Set(cur.map(r => `${r.x},${r.y}`));
+      const playerTx = lastTileRef.current.x;
+      const playerTy = lastTileRef.current.y;
+      // Build collision predicates ONCE per tick — sharing them across all
+      // roamers avoids O(N²) per-roamer work and keeps the tick under 1ms.
+      const occupiedSet = new Set(cur.map((r) => `${r.x},${r.y}`));
+      const isWallFn = (x: number, y: number) => !isFloor(x, y);
       const next = cur.map((r) => {
-        const playerTx = lastTileRef.current.x;
-        const playerTy = lastTileRef.current.y;
-        const dxToPlayer = playerTx - r.x;
-        const dyToPlayer = playerTy - r.y;
-        const distToPlayer = Math.abs(dxToPlayer) + Math.abs(dyToPlayer);
-
-        // CHASE state: if player within CHASE_RADIUS, move 1 tile toward player
-        let dx = 0, dy = 0;
-        if (distToPlayer > 0 && distToPlayer <= CHASE_RADIUS) {
-          if (Math.abs(dxToPlayer) > Math.abs(dyToPlayer)) {
-            dx = dxToPlayer > 0 ? 1 : -1;
-          } else {
-            dy = dyToPlayer > 0 ? 1 : -1;
-          }
-        } else {
-          // ROAM state: pick random direction (or stay)
-          const dirs = [
-            { dx: 0, dy: 0 },
-            { dx: 1, dy: 0 },
-            { dx: -1, dy: 0 },
-            { dx: 0, dy: 1 },
-            { dx: 0, dy: -1 },
-          ];
-          const d = dirs[Math.floor(Math.random() * dirs.length)];
-          dx = d.dx; dy = d.dy;
+        const occupiedFn = (x: number, y: number) =>
+          (x !== r.x || y !== r.y) && occupiedSet.has(`${x},${y}`);
+        const advanced = stepWildAI(r, {
+          playerX: playerTx,
+          playerY: playerTy,
+          isWall: isWallFn,
+          occupied: occupiedFn,
+        });
+        // Keep `chasing` legacy field in-sync for the existing render guards.
+        const chasing = advanced.state === 'Chasing' || advanced.state === 'Alerted';
+        // Update occupancy set so subsequent roamers see the new positions.
+        if (advanced.x !== r.x || advanced.y !== r.y) {
+          occupiedSet.delete(`${r.x},${r.y}`);
+          occupiedSet.add(`${advanced.x},${advanced.y}`);
         }
-
-        const nx = r.x + dx;
-        const ny = r.y + dy;
-        if (
-          (dx !== 0 || dy !== 0) &&
-          isFloor(nx, ny) &&
-          !occupied.has(`${nx},${ny}`) &&
-          !(nx === playerTx && ny === playerTy)
-        ) {
-          occupied.delete(`${r.x},${r.y}`);
-          occupied.add(`${nx},${ny}`);
-          return { ...r, x: nx, y: ny, chasing: distToPlayer <= CHASE_RADIUS };
-        }
-        return { ...r, chasing: distToPlayer <= CHASE_RADIUS };
+        return { ...advanced, chasing };
       });
       roamersRef.current = next;
       setRoamers(next);
@@ -888,6 +874,29 @@ export default function GameScreen() {
                   style={{ width: W, height: H, backgroundColor: 'transparent' }}
                   resizeMode="contain"
                 />
+                {/* WildMinionAI "!" alert icon — pixel-style exclamation that
+                    sits above the sprite head whenever the roamer has spotted
+                    the player and is on the hunt. Bounces with a 2hz pulse
+                    so it draws the eye without being noisy. */}
+                {(r.state === 'Chasing' || r.state === 'Alerted') && (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: 'absolute',
+                      top: -16 + Math.sin(swingPhase * 1.6) * 2,
+                      left: W / 2 - 7,
+                      width: 14,
+                      height: 18,
+                      backgroundColor: '#1a0a0a',
+                      borderWidth: 1.5,
+                      borderColor: '#ff2222',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: '#ff5555', fontSize: 11, fontWeight: 'bold' }}>!</Text>
+                  </View>
+                )}
               </View>
             );
           })}

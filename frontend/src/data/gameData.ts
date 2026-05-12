@@ -580,6 +580,48 @@ export const ACADEMY_MAP: number[][] = [
   [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12],
 ];
 
+// ────────────────────────────────────────────────────────────────────────
+// LEVEL 2B — The Conduit Maze
+// Reached via the spiral staircase (tile 15) in the academy.
+// Narrow corridors, server racks (tile 12 = solid wall), and acid vaults
+// (tile 8 = spike-pad damage tile). The maze is deliberately tighter than
+// the academy so the WildMinionChaseAI line-of-sight mechanic matters.
+// Layout: start at top-right "START TERMINAL", path branches through racks,
+// dead-ends with chests, and ends at the mini-boss room in the centre-south.
+// ────────────────────────────────────────────────────────────────────────
+export const CONDUIT_MAZE: number[][] = [
+  // Row 0 — north outer wall
+  [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12],
+  // Row 1 — spawn corridor (top), boss room behind racks
+  [12, 0, 0, 0,12, 0, 0, 0, 0, 0, 0, 0, 0, 0,12, 0, 0, 0, 0,12],
+  // Row 2 — server racks (12) make pockets
+  [12, 0,12, 0,12, 0,12,12, 0,12,12, 0,12,12,12, 0,12,12, 0,12],
+  // Row 3 — corridor
+  [12, 0, 0, 0, 0, 0,12, 0, 0, 0,12, 0, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 4 — mini-boss approach (centre)
+  [12, 0,12,12,12,12,12, 0,12, 0,12, 0,12,12,12, 0,12,12, 0,12],
+  // Row 5 — mid corridor
+  [12, 0, 0, 0, 0, 0, 0, 0,12, 0, 0, 0,12, 0, 0, 0, 0, 0, 0,12],
+  // Row 6 — acid vault flanks (8) + central mini-boss tile (placeholder)
+  [12, 8, 8,12, 0,12, 0,12,12, 0,12,12,12, 0,12, 0, 0,12, 8,12],
+  // Row 7 — mini-boss arena floor (centre-south)
+  [12, 8, 8,12, 0,12, 0, 0, 0, 0, 0, 0, 0, 0,12, 0, 0,12, 8,12],
+  // Row 8 — acid vaults + corridor
+  [12, 8, 8,12, 0,12, 0,12,12,12,12,12, 0,12,12, 0, 0,12, 8,12],
+  // Row 9 — corridor west
+  [12, 0, 0, 0, 0, 0, 0, 0, 0, 0,12, 0, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 10 — server racks creating chicane
+  [12, 0,12,12, 0,12,12,12,12, 0,12, 0,12,12,12,12, 0,12,12,12],
+  // Row 11 — corridor south
+  [12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,12],
+  // Row 12 — racks + return-stairs
+  [12, 0,12,12,12,12, 0,12,12,12,12,12, 0,12,12, 0,12,12, 0,12],
+  // Row 13 — entrance corridor + RETURN staircase (15) bottom-right
+  [12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,15,12],
+  // Row 14 — south outer wall
+  [12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12,12],
+];
+
 export const NPCS: Record<string, { name: string; x: number; y: number; lines: string[] }> = {
   npc_orion: { name: 'Prof. Orion', x: 2, y: 6, lines: [
     'Welcome to Nexus, Spark.',
