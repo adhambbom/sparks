@@ -39,6 +39,9 @@ import {
 } from '../src/data/conduitMazeData';
 import { PixelText } from '../src/components/PixelText';
 import { VirtualJoystick } from '../src/components/VirtualJoystick';
+import { ActionButton } from '../src/components/ActionButton';
+import { StatBar } from '../src/components/StatBar';
+import SheetSprite from '../src/components/SheetSprite';
 import { useGame } from '../src/contexts/GameContext';
 import { sfx } from '../src/utils/audio';
 import {
@@ -130,7 +133,15 @@ export default function ConduitMazeScreen() {
   useEffect(() => { playerYRef.current = playerY; }, [playerY]);
 
   const [facing, setFacing] = useState<'left' | 'right' | 'up' | 'down'>('up');
+  const facingRef = useRef<'left' | 'right' | 'up' | 'down'>('up');
+  useEffect(() => { facingRef.current = facing; }, [facing]);
   const moveDirRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
+  // 10fps animation tick for the SheetSprite walk loop.
+  const [animTick, setAnimTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setAnimTick((v) => (v + 1) % 1024), 100);
+    return () => clearInterval(t);
+  }, []);
 
   // ── AI Roamers ───────────────────────────────────────────
   const [roamers, setRoamers] = useState<AIRoamer[]>([]);
@@ -434,28 +445,38 @@ export default function ConduitMazeScreen() {
     return out;
   }, [TILE_PX]);
 
-  // ── Player marker ────────────────────────────────────────
-  const player = (
-    <View
-      pointerEvents="none"
-      style={{
-        position: 'absolute',
-        left: playerX * TILE_PX,
-        top: playerY * TILE_PX,
-        width: TILE_PX,
-        height: TILE_PX,
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10,
-      }}
-    >
-      <View style={[styles.playerBox, { width: TILE_PX * 0.78, height: TILE_PX * 0.78 }]}>
-        <PixelText size={Math.max(7, Math.round(TILE_PX * 0.32))} color="#0a0a14" bold>
-          {(state?.player?.name?.[0] || 'A').toUpperCase()}
-        </PixelText>
+  // ── Player sprite (full Adhamb chibi via SheetSprite) ────
+  // Same proportions as Floor 1: ~1.55× tile, anchored on the feet, top zIndex.
+  const player = (() => {
+    const SIZE = TILE_PX * 1.55;
+    const isMoving = moveDirRef.current.dx !== 0 || moveDirRef.current.dy !== 0;
+    // Centre the sprite on the player tile; bias upward so feet land on tile.
+    const cx = playerX * TILE_PX + TILE_PX / 2;
+    const cy = playerY * TILE_PX + TILE_PX / 2;
+    return (
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: cx - SIZE / 2,
+          top: cy - SIZE * 0.78,
+          width: SIZE,
+          height: SIZE,
+          zIndex: 9999,
+          ...(Platform.OS === 'android' ? { elevation: 30 } : {}),
+        }}
+      >
+        <SheetSprite
+          sheet="adhamb"
+          dir={facing}
+          tick={animTick}
+          moving={isMoving}
+          size={SIZE}
+          framesPerStep={3}
+        />
       </View>
-    </View>
-  );
+    );
+  })();
 
   // ── Roamer markers ───────────────────────────────────────
   const renderRoamer = (r: AIRoamer) => {
@@ -495,12 +516,16 @@ export default function ConduitMazeScreen() {
     );
   };
 
-  // ── Derived sidebar data ─────────────────────────────────
+  // ── Derived stats ────────────────────────────────────────
   const pHp = state?.player?.hp ?? 0;
   const pMaxHp = state?.player?.maxHp ?? 1;
   const pMp = state?.player?.mp ?? 0;
   const pMaxMp = state?.player?.maxMp ?? 1;
   const pLevel = state?.player?.level ?? 1;
+  const pSync = state?.player?.syncLevel ?? 1;
+  const pGold = state?.player?.gold ?? 0;
+  const pXp = state?.player?.xp ?? 0;
+  const pXpNext = state?.player?.xpToNext ?? 1;
   const pName = state?.player?.name || 'OPERATIVE';
 
   // Active mission line — derived from world flags.
@@ -510,266 +535,244 @@ export default function ConduitMazeScreen() {
       ? '▸ Defeat the HIVE CUSTODIAN'
       : '▸ Confront the QUANTUM AI · MEGA BOSS';
 
-  // Map legend — one chip per interactive tile type.
-  const legendEntries: { id: number; label: string }[] = [
-    { id: T.START_TERMINAL, label: 'START' },
-    { id: T.TROJAN_CORE, label: 'TROJAN' },
-    { id: T.DATA_STORAGE, label: 'DATA' },
-    { id: T.CONDUIT_CONSOLE, label: 'CONSOLE' },
-    { id: T.ACID, label: 'ACID' },
-    { id: T.MINI_BOSS_GATE, label: 'MINI-BOSS' },
-    { id: T.MEGA_BOSS_GATE, label: 'MEGA' },
-  ];
+  // A button → re-trigger current tile (manual interact).
+  const onActionA = () => {
+    const tid = tileAt(playerX, playerY) as TileId;
+    if (TRIGGER_TILE_IDS.has(tid)) {
+      handleZoneTrigger(tid, `${playerX},${playerY}`);
+      sfx.confirm?.();
+    } else {
+      sfx.cancel?.();
+      setHint('▸ No interactive node here');
+      setTimeout(() => setHint(''), 1200);
+    }
+  };
+  // B button → return to academy.
+  const onActionB = () => {
+    sfx.cancel?.();
+    router.replace('/game');
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* TOP HEADER strip — slim, no chrome over the viewport */}
-      <View style={styles.header}>
-        <PixelText size={9} color={COLORS.neonMagenta}>// LEVEL 2B //</PixelText>
-        <PixelText size={14} color={COLORS.neonCyan} glow bold>THE CONDUIT MAZE</PixelText>
-        <PixelText size={8} color={COLORS.textDim} style={{ marginTop: 2 }}>
-          {`SECTOR ${String(playerX).padStart(2, '0')}-${String(playerY).padStart(2, '0')}`}
-          {`   ROAMERS: ${roamers.length}`}
-          {miniBossCleared ? '   ✓ HIVE CLEAR' : ''}
-        </PixelText>
+      {/* ════════════ TOP HUD ════════════
+          Same layout as Floor 1: status row + shortcuts row. */}
+      <View style={styles.hud} testID="hud-status">
+        <View style={styles.hudStatusRow}>
+          <View style={styles.hudLeft}>
+            <PixelText size={10} color={COLORS.neonCyan} bold>{pName.toUpperCase()}</PixelText>
+            <PixelText size={7} color={COLORS.textDim} style={{ marginTop: 2 }}>LV{pLevel} · S{pSync}</PixelText>
+          </View>
+          <View style={styles.hudBars}>
+            <StatBar value={pHp} max={pMaxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={110} height={8} showText={false} />
+            <View style={{ height: 2 }} />
+            <StatBar value={pMp} max={pMaxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={110} height={8} showText={false} />
+          </View>
+          <View style={styles.hudRight}>
+            <PixelText size={9} color={COLORS.neonYellow} bold>{pGold}G</PixelText>
+            <PixelText size={7} color={COLORS.xp} style={{ marginTop: 2 }}>XP{pXp}/{pXpNext}</PixelText>
+          </View>
+        </View>
+        <View style={styles.hudShortcutsRow}>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.neonCyan }]}
+            onPress={() => { sfx.click?.(); router.push('/inventory'); }}
+            testID="hud-bag"
+          >
+            <PixelText size={9} color={COLORS.neonCyan} bold>BAG</PixelText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.neonMagenta }]}
+            onPress={() => { sfx.click?.(); router.push('/registry'); }}
+            testID="hud-party"
+          >
+            <PixelText size={9} color={COLORS.neonMagenta} bold>PARTY</PixelText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.neonYellow }]}
+            onPress={() => { sfx.click?.(); router.push('/skills'); }}
+            testID="hud-skills"
+          >
+            <PixelText size={9} color={COLORS.neonYellow} bold>SKILLS</PixelText>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: COLORS.textDim }]}
+            onPress={() => { sfx.click?.(); router.replace('/game'); }}
+            testID="hud-exit"
+          >
+            <PixelText size={9} color={COLORS.text} bold>EXIT</PixelText>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* MAIN ROW — sidebar | viewport */}
-      <View style={styles.gameRow}>
-        {/* ═══════════════ LEFT SIDEBAR TERMINAL ═══════════════ */}
-        <View style={[styles.sidebar, { width: SIDEBAR_W }]} testID="conduit-sidebar">
+      {/* ════════════ MISSION LINE ════════════ */}
+      <View style={styles.missionStrip}>
+        <PixelText size={9} color={COLORS.neonMagenta}>// LEVEL 2B //  </PixelText>
+        <PixelText size={9} color={COLORS.neonYellow} bold>{missionLine}</PixelText>
+      </View>
 
-          {/* PARTY STATUS panel */}
-          <View style={styles.panel}>
-            <PixelText size={8} color={COLORS.neonCyan} bold>PARTY STATUS</PixelText>
-            <PixelText size={9} color={COLORS.text} style={{ marginTop: 4 }}>{pName.toUpperCase()}</PixelText>
-            <PixelText size={7} color={COLORS.textDim}>LV {pLevel}</PixelText>
-
-            <PixelText size={7} color={COLORS.neonGreen} style={{ marginTop: 4 }}>HP {pHp}/{pMaxHp}</PixelText>
-            <View style={styles.barTrack}>
-              <View style={[styles.barFillHp, { width: `${Math.max(2, Math.min(100, (pHp / pMaxHp) * 100))}%` }]} />
-            </View>
-
-            <PixelText size={7} color={COLORS.neonMagenta} style={{ marginTop: 4 }}>MP {pMp}/{pMaxMp}</PixelText>
-            <View style={styles.barTrack}>
-              <View style={[styles.barFillMp, { width: `${Math.max(2, Math.min(100, (pMp / pMaxMp) * 100))}%` }]} />
-            </View>
+      {/* ════════════ VIEWPORT ════════════ */}
+      <View style={{ alignItems: 'center', flex: 1, marginTop: 4 }}>
+        <View
+          style={[styles.viewport, { width: camViewportW, height: camViewportH }]}
+          testID="conduit-viewport"
+        >
+          {/* Parallax depth layer */}
+          <View style={{ position: 'absolute', left: -parX, top: -parY, opacity: 0.30 }}>
+            <Image
+              source={{ uri: backdropUri }}
+              style={{
+                width: viewportW * 1.08,
+                height: (viewportW * 1.08) / BG_ASPECT,
+              }}
+              resizeMode="cover"
+              fadeDuration={0}
+            />
           </View>
 
-          {/* MISSIONS panel */}
-          <View style={styles.panel}>
-            <PixelText size={8} color={COLORS.neonYellow} bold>MISSIONS</PixelText>
-            <PixelText size={7} color={COLORS.text} style={{ marginTop: 4, lineHeight: 11 }}>
-              {missionLine}
-            </PixelText>
+          {/* Main backdrop + overlay — locked to camera */}
+          <View style={{ position: 'absolute', left: -camX, top: -camY }}>
+            {backdrop}
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: viewportW,
+                height: viewportH,
+                backgroundColor: 'rgba(4,8,20,0.18)',
+              }}
+            />
+            {triggerMarkers}
+            {gridDebug}
+            {roamers.map(renderRoamer)}
+            {player}
           </View>
 
-          {/* MAP LEGEND panel */}
-          <View style={styles.panel}>
-            <PixelText size={8} color={COLORS.neonGreen} bold>MAP LEGEND</PixelText>
-            <View style={{ marginTop: 4 }}>
-              {legendEntries.map((e) => {
-                const meta = ZONE_META[e.id];
-                if (!meta) return null;
-                return (
-                  <View key={e.id} style={styles.legendRow}>
-                    <View style={[styles.legendSwatch, { backgroundColor: meta.accent + '55', borderColor: meta.accent }]} />
-                    <PixelText size={7} color={COLORS.text}>{e.label}</PixelText>
-                  </View>
-                );
-              })}
-            </View>
+          {/* Cinematic vignette like Floor 1 — soft top/bottom dark bands */}
+          <View pointerEvents="none" style={[styles.vignetteBand, { top: 0 }]}>
+            <View style={{ height: 8, backgroundColor: 'rgba(0,0,0,0.22)' }} />
+            <View style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.10)' }} />
+          </View>
+          <View pointerEvents="none" style={[styles.vignetteBand, { bottom: 0 }]}>
+            <View style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.10)' }} />
+            <View style={{ height: 8, backgroundColor: 'rgba(0,0,0,0.22)' }} />
           </View>
 
-          {/* AI activity (compact chips) */}
-          {roamers.length > 0 && (
-            <View style={styles.panel}>
-              <PixelText size={8} color={COLORS.neonRed} bold>AI ACTIVITY</PixelText>
-              {roamers.map((r) => {
-                const c =
-                  r.state === 'Chasing' ? COLORS.neonRed
-                    : r.state === 'Alerted' ? COLORS.neonYellow
-                      : r.state === 'Returning' ? COLORS.neonMagenta
-                        : COLORS.neonGreen;
-                return (
-                  <View key={r.uid} style={[styles.sideChip, { borderColor: c }]}>
-                    <PixelText size={6} color={c}>{r.enemyId.replace(/_/g, ' ').toUpperCase()}</PixelText>
-                    <PixelText size={6} color={c} bold>{r.state.toUpperCase()}</PixelText>
-                  </View>
-                );
-              })}
+          {/* Scanline + vignette inset */}
+          <View pointerEvents="none" style={styles.scanlineOverlay} />
+
+          {/* Encounter flash */}
+          {combatLock && (
+            <View pointerEvents="none" style={styles.encounterFlash}>
+              <PixelText size={18} color="#ff2a55" glow bold>! ENGAGED !</PixelText>
             </View>
           )}
-
-          {/* Action buttons — relocated from over the viewport */}
-          <View style={{ gap: 6, marginTop: 'auto' }}>
-            <TouchableOpacity
-              style={[styles.sideAction, { borderColor: COLORS.neonMagenta }]}
-              onPress={() => router.push('/registry')}
-              testID="conduit-party"
-            >
-              <PixelText size={9} color={COLORS.neonMagenta} bold>PARTY</PixelText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sideAction, { borderColor: COLORS.textDim }]}
-              onPress={() => router.replace('/game')}
-              testID="conduit-exit"
-            >
-              <PixelText size={9} color={COLORS.textDim} bold>EXIT</PixelText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sideAction, { borderColor: debugOverlay ? COLORS.neonGreen : COLORS.borderHi }]}
-              onPress={() => setDebugOverlay((v) => !v)}
-              testID="conduit-grid-toggle"
-            >
-              <PixelText size={8} color={debugOverlay ? COLORS.neonGreen : COLORS.textDim}>
-                {debugOverlay ? 'GRID ON' : 'GRID OFF'}
-              </PixelText>
-            </TouchableOpacity>
-          </View>
         </View>
 
-        {/* ═══════════════ TIGHT CAMERA VIEWPORT ═══════════════ */}
-        <View style={{ alignItems: 'center', flex: 1 }}>
-          <View
-            style={[styles.viewport, { width: camViewportW, height: camViewportH }]}
-            testID="conduit-viewport"
-          >
-            {/* Parallax depth layer — dimmed darker copy of the backdrop. */}
-            <View style={{ position: 'absolute', left: -parX, top: -parY, opacity: 0.30 }}>
-              <Image
-                source={{ uri: backdropUri }}
-                style={{
-                  width: viewportW * 1.08,
-                  height: (viewportW * 1.08) / BG_ASPECT,
-                }}
-                resizeMode="cover"
-                fadeDuration={0}
-              />
+        {/* Toast / hint anchored below viewport */}
+        <View style={styles.toastSlot}>
+          {!!zoneToast ? (
+            <View style={[styles.zoneToast, { borderColor: zoneToast.accent }]} testID="zone-toast">
+              <PixelText size={10} color={zoneToast.accent} bold>{zoneToast.label}</PixelText>
+              <PixelText size={9} color={COLORS.text} style={{ marginTop: 2 }}>{zoneToast.flavor}</PixelText>
             </View>
-
-            {/* Main backdrop + interactive overlay — locked to camera. */}
-            <View style={{ position: 'absolute', left: -camX, top: -camY }}>
-              {backdrop}
-              <View
-                pointerEvents="none"
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: viewportW,
-                  height: viewportH,
-                  backgroundColor: 'rgba(4,8,20,0.18)',
-                }}
-              />
-              {triggerMarkers}
-              {gridDebug}
-              {roamers.map(renderRoamer)}
-              {player}
+          ) : !!hint ? (
+            <View style={styles.hintBar}>
+              <PixelText size={10} color={COLORS.neonGreen} glow bold>{hint}</PixelText>
             </View>
-
-            {/* Scanline + vignette */}
-            <View pointerEvents="none" style={styles.scanlineOverlay} />
-
-            {/* Encounter flash overlay (combatLock triggers it) */}
-            {combatLock && (
-              <View pointerEvents="none" style={styles.encounterFlash}>
-                <PixelText size={18} color="#ff2a55" glow bold>! ENGAGED !</PixelText>
-              </View>
-            )}
-          </View>
-
-          {/* Zone toast / hint anchored just below the viewport — fixed
-              height so it never bumps the layout. */}
-          <View style={styles.toastSlot}>
-            {!!zoneToast ? (
-              <View style={[styles.zoneToast, { borderColor: zoneToast.accent }]} testID="zone-toast">
-                <PixelText size={10} color={zoneToast.accent} bold>{zoneToast.label}</PixelText>
-                <PixelText size={9} color={COLORS.text} style={{ marginTop: 2 }}>{zoneToast.flavor}</PixelText>
-              </View>
-            ) : !!hint ? (
-              <View style={styles.hintBar}>
-                <PixelText size={9} color={COLORS.neonGreen}>{hint}</PixelText>
-              </View>
-            ) : (
-              <PixelText size={8} color={COLORS.textDim}>
-                ⓘ Walk into glowing tiles to trigger zone events
-              </PixelText>
-            )}
-          </View>
+          ) : (
+            <PixelText size={8} color={COLORS.textDim}>
+              {`SECTOR ${String(playerX).padStart(2,'0')}-${String(playerY).padStart(2,'0')}  ·  ROAMERS ${roamers.length}`}
+            </PixelText>
+          )}
         </View>
+
+        {/* Tiny GRID toggle (level-design helper) */}
+        <TouchableOpacity
+          onPress={() => setDebugOverlay((v) => !v)}
+          style={styles.gridToggle}
+          testID="conduit-grid-toggle"
+        >
+          <PixelText size={7} color={debugOverlay ? COLORS.neonGreen : COLORS.textDim}>
+            {debugOverlay ? '[ GRID ON ]' : '[ GRID OFF ]'}
+          </PixelText>
+        </TouchableOpacity>
       </View>
 
-      {/* JOYSTICK — centered below */}
-      <View style={styles.joystickWrap}>
-        <VirtualJoystick
-          onMove={(dx, dy) => { moveDirRef.current = { dx, dy }; }}
-          onEnd={() => { moveDirRef.current = { dx: 0, dy: 0 }; }}
-        />
-      </View>
+      {/* ════════════ CONTROLS — same as Floor 1 ════════════ */}
+      <VirtualJoystick
+        onMove={(dx, dy) => {
+          // Snap to dominant axis ±1 — same dead-zone semantics as Floor 1.
+          const adx = Math.abs(dx);
+          const ady = Math.abs(dy);
+          const mag = Math.max(adx, ady);
+          if (mag < 0.18) {
+            moveDirRef.current = { dx: 0, dy: 0 };
+            return;
+          }
+          if (adx > ady) {
+            moveDirRef.current = { dx: dx < 0 ? -1 : 1, dy: 0 };
+            setFacing(dx < 0 ? 'left' : 'right');
+          } else {
+            moveDirRef.current = { dx: 0, dy: dy < 0 ? -1 : 1 };
+            setFacing(dy < 0 ? 'up' : 'down');
+          }
+        }}
+        onEnd={() => { moveDirRef.current = { dx: 0, dy: 0 }; }}
+      />
+      <ActionButton label="A" position="A" color={COLORS.neonGreen} onPress={onActionA} testID="btn-a" />
+      <ActionButton label="B" position="B" color={COLORS.neonMagenta} onPress={onActionB} testID="btn-b" />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#04040a', alignItems: 'center' },
-  header: { alignItems: 'center', marginTop: 4, marginBottom: 6 },
-  gameRow: {
+  container: { flex: 1, backgroundColor: '#04040a' },
+
+  // ── HUD ──────────────────────────────────────────────────
+  hud: {
+    backgroundColor: 'rgba(8,10,24,0.92)',
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.neonCyan,
+    paddingHorizontal: 10,
+    paddingTop: 6,
+    paddingBottom: 6,
+  },
+  hudStatusRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    width: '100%',
-    paddingHorizontal: 8,
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  sidebar: {
-    backgroundColor: 'rgba(8,10,24,0.85)',
-    borderWidth: 2,
-    borderColor: COLORS.neonCyan,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 8,
-    minHeight: 360,
-    boxShadow: '0 0 16px rgba(0,240,255,0.18)',
-  } as any,
-  panel: {
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
+  hudLeft: { width: 80 },
+  hudBars: { width: 130 },
+  hudRight: { width: 80, alignItems: 'flex-end' },
+  hudShortcutsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 6,
+    gap: 6,
   },
-  barTrack: {
-    height: 6,
-    backgroundColor: '#0a0a14',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    marginTop: 2,
-    width: '100%',
-    overflow: 'hidden',
-  },
-  barFillHp: { height: '100%', backgroundColor: COLORS.neonGreen },
-  barFillMp: { height: '100%', backgroundColor: COLORS.neonMagenta },
-  legendRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginVertical: 1 },
-  legendSwatch: {
-    width: 10,
-    height: 10,
-    borderWidth: 1,
-  },
-  sideChip: {
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderWidth: 1,
-    marginTop: 3,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  sideAction: {
-    paddingVertical: 8,
-    paddingHorizontal: 6,
+  shortcutBtn: {
+    flex: 1,
+    paddingVertical: 5,
     borderWidth: 2,
     backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
   },
+
+  // ── Mission strip ────────────────────────────────────────
+  missionStrip: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+
+  // ── Viewport ─────────────────────────────────────────────
   viewport: {
     overflow: 'hidden',
     borderWidth: 2,
@@ -785,20 +788,18 @@ const styles = StyleSheet.create({
     boxShadow: 'inset 0 0 80px rgba(0,240,255,0.10), inset 0 0 14px rgba(0,0,0,0.7)',
     pointerEvents: 'none',
   } as any,
+  vignetteBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 14,
+  },
   encounterFlash: {
     position: 'absolute',
     inset: 0,
     backgroundColor: 'rgba(255,42,85,0.32)',
     alignItems: 'center',
     justifyContent: 'center',
-  } as any,
-  playerBox: {
-    backgroundColor: COLORS.neonCyan,
-    borderWidth: 2,
-    borderColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 0 10px #00f0ff',
   } as any,
   alertBubble: {
     position: 'absolute',
@@ -813,9 +814,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // ── Toast / hint ─────────────────────────────────────────
   toastSlot: {
-    marginTop: 8,
-    minHeight: 40,
+    marginTop: 6,
+    minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
@@ -824,8 +827,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderWidth: 2,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     maxWidth: 320,
+    alignItems: 'center',
   },
   hintBar: {
     paddingHorizontal: 12,
@@ -834,11 +838,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.neonGreen,
     backgroundColor: 'rgba(0,255,128,0.08)',
   },
-  joystickWrap: {
-    marginTop: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
+  gridToggle: {
+    marginTop: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
 });
 
