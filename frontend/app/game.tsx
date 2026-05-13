@@ -1106,14 +1106,43 @@ export default function GameScreen() {
       <View style={styles.hud} testID="hud-status">
         <View style={styles.hudStatusRow}>
           <View style={styles.hudLeft}>
-            <PixelText size={10} color={COLORS.neonCyan} bold>{state.player.name.toUpperCase()}</PixelText>
+            {(() => {
+              // Auto-truncate long player names so they never wrap mid-word.
+              // 12 chars + ellipsis is the readable ceiling at size=10 in our
+              // pixel font. PLAYWRIGHTRUNNER → PLAYWRIGHTRU…
+              const n = state.player.name.toUpperCase();
+              const display = n.length > 13 ? n.slice(0, 12) + '…' : n;
+              return (
+                <PixelText size={10} color={COLORS.neonCyan} bold numberOfLines={1}>
+                  {display}
+                </PixelText>
+              );
+            })()}
             <PixelText size={7} color={COLORS.textDim} style={{ marginTop: 2 }}>LV{state.player.level} · S{state.player.syncLevel}</PixelText>
           </View>
-          <View style={styles.hudBars}>
-            <StatBar value={state.player.hp} max={state.player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={110} height={8} showText={false} />
-            <View style={{ height: 2 }} />
-            <StatBar value={state.player.mp} max={state.player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={110} height={8} showText={false} />
-          </View>
+          {(() => {
+            // STABILITY low-warning pulse: tint the bar magenta-red when
+            // below 25% so the player sees danger at a glance. Driven by
+            // animTick so it pulses 2 Hz.
+            const hpPct = state.player.hp / Math.max(1, state.player.maxHp);
+            const lowStab = hpPct < 0.25;
+            const pulse = lowStab ? 0.55 + 0.45 * Math.abs(Math.sin(animTick * 0.6)) : 1;
+            return (
+              <View style={[styles.hudBars, { opacity: pulse }]}>
+                <StatBar
+                  value={state.player.hp}
+                  max={state.player.maxHp}
+                  color={lowStab ? '#ff4566' : COLORS.hp}
+                  bgColor={COLORS.hpBg}
+                  width={110}
+                  height={8}
+                  showText={false}
+                />
+                <View style={{ height: 2 }} />
+                <StatBar value={state.player.mp} max={state.player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={110} height={8} showText={false} />
+              </View>
+            );
+          })()}
           <View style={styles.hudRight}>
             <PixelText size={9} color={COLORS.neonYellow} bold>{state.player.gold}G</PixelText>
             <PixelText size={7} color={COLORS.xp} style={{ marginTop: 2 }}>DATA{state.player.xp}/{state.player.xpToNext}</PixelText>

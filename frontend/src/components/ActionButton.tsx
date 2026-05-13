@@ -12,7 +12,10 @@ type Props = {
 };
 
 export function ActionButton({ label, color = COLORS.neonMagenta, onPress, position, testID }: Props) {
-  const offset = position === 'A' ? 100 : 24;
+  // GameBoy-style layout: primary action (A) sits closest to the right
+  // thumb (~24 px from edge), secondary (B) sits to its LEFT (~100 px).
+  // This matches the iconic GBA / portable controller muscle-memory.
+  const offset = position === 'A' ? 24 : 100;
   return (
     <TouchableOpacity
       activeOpacity={0.7}

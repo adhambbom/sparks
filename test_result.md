@@ -1145,6 +1145,78 @@ agent_communication:
         - COOLDOWN COUNTERS on SIGNATURE abilities (currently any-
           time-usable; SIGNATURES map already declares cooldown turns
           per ability).
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  PHASE 2 FINAL POLISH — Controls + Readability + Redeploy UX  ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Last polish pass before Phase 3. Focused exclusively on control
+      ergonomics, UI readability, and tactical clarity per the user's
+      checklist.
+
+      1) A/B BUTTON LAYOUT — GameBoy-style thumb comfort
+         ActionButton offsets swapped:
+            A (primary, cyan-green) → right: 24  (closest to thumb)
+            B (secondary, magenta)  → right: 100 (LEFT of A)
+         Matches GBA / portable muscle-memory — primary action lives
+         where the right thumb naturally rests.
+
+      2) PLAYER-NAME AUTO-TRUNCATE in HUD
+         BEFORE: "PLAYWRIGHTRUNNER" wrapped mid-word as PLAYWRIGHTRUN /
+                  NER and overlapped the bars row.
+         AFTER:  Names > 13 chars truncate with ellipsis:
+                  "PLAYWRIGHTRU…"
+                 numberOfLines={1} prevents any wrap.
+
+      3) LOW-STABILITY PULSE WARNING (overworld HUD)
+         When player STABILITY drops below 25 %:
+           • the bar tints from neon-pink to alarm-red (#ff4566)
+           • the entire bar group pulses 2 Hz (opacity 0.55 ↔ 1.0)
+         Driven by animTick — no new timers added. Players see
+         critical-stability danger at a glance even while moving.
+
+      4) REDEPLOY BANNER in combat deploy panel
+         When an entity disconnects (KO'd) and fallbackPrompt is true,
+         a red-bordered banner appears ABOVE the entity picker:
+            ⚠ ENTITY DISCONNECTED
+            REDEPLOY ANOTHER ENTITY OR PRESS [BACK] TO FIGHT SOLO
+         Clear tactical-urgency cue — no need to read the combat log.
+         The ✕ close button also clears the prompt + flips back to
+         the main action grid.
+
+      5) DEPLOY-PANEL EMPTY STATE — terminology cleaned
+         "No minions in party. Quarantine some!"
+            →  "No entities in network — JAILBREAK some!"
+
+      VERIFICATION (Playwright screenshot at /game)
+         • Layout: cyan joystick LEFT, magenta B + green A RIGHT
+         • HUD: "PLAYWRIGHTRU…" + "LV1 · S1" + DATA 0/100 + 50G
+         • Player chibi visible & centred, pavement + corruption +
+           road stripes + dollar store tile clearly readable
+         • Void backdrop with distant infrastructure lights still
+           cinematic below the map
+
+      WHAT THIS ITERATION SOLVES (final Phase 2 checklist)
+        ✅ Control layout — GBA-style, primary action closest to thumb
+        ✅ UI readability — name auto-truncate, no overlapping text
+        ✅ Tactical clarity — low-STAB pulse + REDEPLOY banner
+        ✅ Mobile responsiveness — viewport untouched, controls fit
+            tall + narrow screens without overflow
+        ✅ Atmosphere preserved — eerie, synthetic, void-framed
+
+      REMAINING POLISH (deferred to next deep round)
+        - Per-turn STATUS-EFFECT ticks (active-statuses array per
+          combatant, runs on turnEnd)
+        - Status icon row above each combatant
+        - SIGNATURE-ability cooldown counters
+        - REBOOT (revive) utility item
+        - Final fantasy-term audit on inventory / shop / char-create
+        - Conduit-maze tile-rule parity
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+      Ready to proceed to Phase 3 once user signs off.
+
         - REBOOT (revive) utility item — restore a disconnected entity
           mid-fight at a POWER GRID cost.
         - Final fantasy-term audit on inventory/shop/character-create

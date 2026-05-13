@@ -1055,9 +1055,30 @@ export default function CombatScreen() {
           </ScrollView>
         )}
 
-        {/* ── DEPLOY MINION picker ────────────────────────────────────── */}
+        {/* ── DEPLOY ENTITY picker ────────────────────────────────────── */}
         {panel === 'minionDeploy' && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
+          <View>
+            {/* REDEPLOY BANNER — pulsed urgency cue when an entity just
+                disconnected. Players see the prompt without reading the log. */}
+            {fallbackPrompt && (
+              <View style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                marginBottom: 6,
+                borderWidth: 2,
+                borderColor: '#ff4566',
+                backgroundColor: 'rgba(80,10,30,0.55)',
+                alignItems: 'center',
+              }}>
+                <PixelText size={11} color={'#ff7090'} bold glow>
+                  ⚠ ENTITY DISCONNECTED
+                </PixelText>
+                <PixelText size={9} color={'#ffb0c0'} style={{ marginTop: 2 }}>
+                  REDEPLOY ANOTHER ENTITY OR PRESS [BACK] TO FIGHT SOLO
+                </PixelText>
+              </View>
+            )}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
             {(state.quantum?.party ?? [])
               .filter((m) => !knockedOut.has(m.uid))
               .map((m) => {
@@ -1106,10 +1127,11 @@ export default function CombatScreen() {
               );
             })}
             {(state.quantum?.party ?? []).length === 0 && (
-              <PixelText size={11} color={COLORS.textDim}>No minions in party. Quarantine some!</PixelText>
+              <PixelText size={11} color={COLORS.textDim}>No entities in network — JAILBREAK some!</PixelText>
             )}
-            <PixelButton title="✕" onPress={() => setPanel('main')} color={COLORS.textDim} size="sm" />
-          </ScrollView>
+            <PixelButton title="✕" onPress={() => { setPanel('main'); setFallbackPrompt(false); }} color={COLORS.textDim} size="sm" />
+            </ScrollView>
+          </View>
         )}
 
         {/* ── MINION SKILL picker — full bottom-takeover (CyborgBattleMovePanel) ──
