@@ -660,14 +660,16 @@ export default function CombatScreen() {
       <View style={styles.bgGrid} />
 
       {/* (1) COMBAT LOG — pinned at the very TOP, well clear of the character sprites.
-          Semi-transparent black card per the new layout spec. */}
+          Semi-transparent black card per the new layout spec.
+          Each entry allowed up to 2 lines so long enemy names + intros
+          (e.g. "⚠ BOSS: Bio-Mech Marauder appears!") never get clipped. */}
       <View style={styles.logBox} pointerEvents="none">
         {log.slice(-2).map((l, i, arr) => (
           <PixelText
             key={`${i}-${l}`}
             size={10}
             color={i === arr.length - 1 ? COLORS.text : COLORS.textDim}
-            numberOfLines={1}
+            numberOfLines={2}
           >
             {l}
           </PixelText>
@@ -995,22 +997,23 @@ export default function CombatScreen() {
         {turn === 'player' && !busy && panel === 'main' && (
           <View style={styles.actionGrid}>
             <View style={styles.actionCell}>
-              <PixelButton title="EXECUTE" onPress={playerAttack} color={COLORS.neonRed} testID="combat-attack" full />
+              <PixelButton title="STRIKE" onPress={playerAttack} color={COLORS.neonRed} testID="combat-attack" full size="sm" />
             </View>
             <View style={styles.actionCell}>
-              <PixelButton title="PROTOCOLS" onPress={() => setPanel('skills')} color={COLORS.neonCyan} testID="combat-skill" full />
+              <PixelButton title="SIGNAL" onPress={() => setPanel('skills')} color={COLORS.neonCyan} testID="combat-skill" full size="sm" />
             </View>
             <View style={styles.actionCell}>
-              <PixelButton title="UTILITY" onPress={() => setPanel('items')} color={COLORS.neonGreen} testID="combat-item" full />
+              <PixelButton title="PATCH" onPress={() => setPanel('items')} color={COLORS.neonGreen} testID="combat-item" full size="sm" />
             </View>
             {/* ── JAILBREAK (capture) ────────────────────────────────── */}
             <View style={styles.actionCell}>
               <PixelButton
-                title="JAILBREAK"
+                title="BREACH"
                 onPress={() => setPanel('spikes')}
                 color={COLORS.neonMagenta}
                 testID="combat-tame"
                 full
+                size="sm"
               />
             </View>
             <View style={styles.actionCell}>
@@ -1020,10 +1023,11 @@ export default function CombatScreen() {
                 color={COLORS.neonYellow}
                 testID="combat-call"
                 full
+                size="sm"
               />
             </View>
             <View style={styles.actionCell}>
-              <PixelButton title="DISCONNECT" onPress={playerRun} color={COLORS.textDim} testID="combat-run" full />
+              <PixelButton title="ESCAPE" onPress={playerRun} color={COLORS.textDim} testID="combat-run" full size="sm" />
             </View>
           </View>
         )}

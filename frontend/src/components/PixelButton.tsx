@@ -47,7 +47,13 @@ export function PixelButton({ title, onPress, color = COLORS.neonCyan, disabled,
       <View style={[styles.corner, styles.tr, { backgroundColor: disabled ? COLORS.border : color }]} />
       <View style={[styles.corner, styles.bl, { backgroundColor: disabled ? COLORS.border : color }]} />
       <View style={[styles.corner, styles.br, { backgroundColor: disabled ? COLORS.border : color }]} />
-      <PixelText size={fontSize} color={disabled ? COLORS.textDim : color} bold style={{ textAlign: 'center' }}>
+      <PixelText
+        size={fontSize}
+        color={disabled ? COLORS.textDim : color}
+        bold
+        style={{ textAlign: 'center' }}
+        numberOfLines={1}
+      >
         {title}
       </PixelText>
     </TouchableOpacity>
@@ -59,7 +65,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 100,
+    minWidth: 60,
   },
   corner: {
     position: 'absolute',

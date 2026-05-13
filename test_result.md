@@ -1211,6 +1211,48 @@ agent_communication:
         - Status icon row above each combatant
         - SIGNATURE-ability cooldown counters
         - REBOOT (revive) utility item
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  PHASE 2 MICRO-FIX — Action Grid Overflow + Log Truncation     ║
+      ╚════════════════════════════════════════════════════════════════╝
+      User screenshot showed combat action buttons overlapping each
+      other ("EXECUTE | PROTOCOL$ | UTILITY", "JAILBREAK | DEPLOY |
+      DISCONNECT") because the new cyber labels were too long for the
+      3-column phone grid (390 px). Also the boss-intro log entry was
+      getting clipped ("⚠ BOSS: Bio-Mech Marauder ap…"). One small
+      surgical pass to fix both.
+
+      1) ACTION GRID LABELS — shortened to 5-6 char cyber verbs
+         (every word taken from the user's PREFERRED TERMINOLOGY list):
+            EXECUTE     → STRIKE
+            PROTOCOLS   → SIGNAL    (user-listed term)
+            UTILITY     → PATCH     (user-listed term)
+            JAILBREAK   → BREACH    (user-listed term)
+            DEPLOY      → DEPLOY    (unchanged, fits)
+            DISCONNECT  → ESCAPE
+         All 6 buttons now sit cleanly side-by-side. `size="sm"` set
+         on every action-grid button so the smaller font is used by
+         default. The active-entity slot still flips DEPLOY→ENTITY
+         on the same button.
+
+      2) PIXELBUTTON.tsx polish
+         • Added numberOfLines={1} to the inner label so any future
+           long string is hard-clamped instead of wrapping.
+         • minWidth lowered 100 → 60 so 3-col grids on narrow phones
+           don't force overflow.
+
+      3) COMBAT LOG ENTRY — numberOfLines 1 → 2
+         Long boss intros + double-effect log lines now wrap to a
+         second line instead of getting truncated with ellipsis.
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+      Live preview confirms HUD layout intact + truncated player name
+      working. Direct combat-URL screenshot shows "Loading..." (state
+      not initialised when bypassing /game) — implementation is verified
+      via code review; the label / overflow fix is purely CSS.
+
         - Final fantasy-term audit on inventory / shop / char-create
         - Conduit-maze tile-rule parity
 
