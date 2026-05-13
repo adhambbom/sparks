@@ -21,6 +21,7 @@ import {
 import SheetSprite, { prefetchSheet } from '../src/components/SheetSprite';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
+import { SystemPrompt } from '../src/components/SystemPrompt';
 import { StatBar } from '../src/components/StatBar';
 import { VirtualJoystick } from '../src/components/VirtualJoystick';
 import { ActionButton } from '../src/components/ActionButton';
@@ -1276,6 +1277,15 @@ export default function GameScreen() {
           </ScrollView>
         </View>
       </Modal>
+      {/* ── ONBOARDING TUTORIAL PROMPTS ──────────────────────────
+          intro_sync   — first launch (NETWORK CONTACT)
+          controls_tip — first overworld load (INTERFACE BOUND)
+          synergy_intro shown ONLY when player has at least one
+          unspent synergy point — keeps it contextual to the moment
+          the SYNERGY GRID button actually starts pulsing. */}
+      <SystemPrompt flag="intro_sync" />
+      <SystemPrompt flag="controls_tip" />
+      {(state.player.synergyPoints ?? 0) > 0 && <SystemPrompt flag="synergy_intro" />}
     </SafeAreaView>
   );
 }

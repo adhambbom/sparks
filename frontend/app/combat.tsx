@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ENEMIES, ABILITIES, ITEMS, Element, SPRITE_ASSETS } from '../src/data/gameData';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
+import { SystemPrompt } from '../src/components/SystemPrompt';
+import { markTutorialShown } from '../src/systems/tutorialState';
 import { StatBar } from '../src/components/StatBar';
 import Floater from '../src/components/Floater';
 import { useGame } from '../src/contexts/GameContext';
@@ -183,6 +185,11 @@ export default function CombatScreen() {
   // MIRROR-PING (synergy): grants the player a free turn after a deploy
   // by short-circuiting one upcoming enemy turn.
   const [priorityFreeTurn, setPriorityFreeTurn] = useState(false);
+  // Tutorial trigger flags — flipped when their event fires this session.
+  // The SystemPrompt itself self-gates via AsyncStorage so it only ever
+  // appears once across all sessions.
+  const [showRarityTip, setShowRarityTip] = useState(false);
+  const [showDataLevelTip, setShowDataLevelTip] = useState(false);
 
   // ── ACTIVE STATUS EFFECTS ─────────────────────────────────────────
   // Lists of currently-applied STATUSES on enemy / player. Each entry
@@ -1003,6 +1010,8 @@ export default function CombatScreen() {
       const award = Math.max(1, Math.floor(enemyData.xp * 0.7));
       const r = awardEntityXp(deployedMinion.uid, award);
       pushLog(`${deployedMinion.name} +${r.gained} DATA`);
+      // ── TUTORIAL TRIGGER: first DATA award shows the leveling primer.
+      setShowDataLevelTip(true);
       if (r.leveled) {
         sfx.levelUp();
         pushLog(`▲ ${deployedMinion.name} DATA LV ${r.level}!`);
@@ -1783,6 +1792,28 @@ export default function CombatScreen() {
           </View>
         )}
       </View>
+      {/* ── CONTEXT-AWARE TUTORIAL TRIGGERS ──────────────────────────
+          Each SystemPrompt self-gates via AsyncStorage. They render
+          inline so React unmounts cleanly when their condition flips.
+          • combat_basics    — first time the player enters combat.
+          • deploy_primer    — first time the DEPLOY panel opens.
+          • stability_critical — first time entity drops below 30% stab.
+          • reboot_window    — first DISCONNECT event.
+          • corruption_warning — first enemy with active burn / boss tag.
+          • rarity_reveal    — fires while a RARE+ extract floater is up.
+          • data_leveling    — fires after the entity gains its first DATA.
+      */}
+      <SystemPrompt flag="combat_basics" />
+      {panel === 'minionDeploy' && <SystemPrompt flag="deploy_primer" />}
+      {deployedMinion && minionHp > 0 && minionMaxHp > 0 && (minionHp / minionMaxHp) < 0.30 && (
+        <SystemPrompt flag="stability_critical" />
+      )}
+      {deployedMinion === null && knockedOut.size > 0 && fallbackPrompt && (
+        <SystemPrompt flag="reboot_window" />
+      )}
+      {(enemyBurn > 0 || isBoss) && <SystemPrompt flag="corruption_warning" />}
+      {showRarityTip && <SystemPrompt flag="rarity_reveal" />}
+      {showDataLevelTip && <SystemPrompt flag="data_leveling" />}
     </SafeAreaView>
   );
 }

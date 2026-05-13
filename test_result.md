@@ -443,7 +443,47 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      UI READABILITY POLISH — Combat HUD audit + locked button metrics.
+      TUTORIAL / ONBOARDING OVERHAUL shipped.
+
+      New files:
+        • src/systems/tutorialState.ts — AsyncStorage-backed flag store
+          with 10 distinct flags. Once-only persistence, lazy-cached.
+        • src/data/tutorialPrompts.ts — all onboarding copy. Hard rules:
+          ≤45 char lines, ≤3 body lines, cyber-terminal tone, eerie.
+        • src/components/SystemPrompt.tsx — universal tutorial modal:
+            · Terminal prefix (`> sync_protocol_init_`) + blinking cursor
+            · Neon title with glyph + glow
+            · Scanline divider
+            · Locked CONTINUE button
+            · Self-gates via AsyncStorage (idempotent across sessions)
+            · 92% max-width, mobile-friendly, no overlap
+
+      Wired triggers:
+        Overworld (game.tsx):
+          · intro_sync       — first launch (NETWORK CONTACT)
+          · controls_tip     — first overworld load (INTERFACE BOUND)
+          · synergy_intro    — only when player has unspent SP
+        Combat (combat.tsx):
+          · combat_basics       — first combat entry
+          · deploy_primer       — first time DEPLOY panel opens
+          · stability_critical  — entity drops <30% stability
+          · reboot_window       — first DISCONNECT fallback
+          · corruption_warning  — first burn-active / boss enemy
+          · rarity_reveal       — first RARE+ extract (session flag)
+          · data_leveling       — first entity DATA award (session flag)
+
+      Tone direction enforced — every prompt reads as:
+        "you are syncing into a dangerous artificial network."
+      No fantasy verbs, all CAPS titles, eerie cyber wording.
+
+      Mobile UX:
+        · Single shared component for all prompts — consistent feel
+        · Large touch target on CONTINUE
+        · No overlap with combat HUD (modal overlay)
+        · Backdrop dismiss for power-users
+
+      No backend / API / schema changes.
+      Bundle: 951 modules, clean. All routes 200.
 
       Style audit + tightening (app/combat.tsx):
         • enemyNamePlate: minWidth 200→220, maxWidth 320, paddingV 5→6,
