@@ -813,3 +813,82 @@ agent_communication:
       walking into a roamer — couldn't reliably automate in this test
       session, but code-paths are exercised by existing combat tests.
 
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  PHASE 1 — FOUNDATION POLISH (Level 1 "Forgotten Block")      ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Per user's QUANTUM REGISTRY plan: focus on ONE polished district
+      first. Phase 1 = foundation polish (camera, tile scale, empty
+      borders, viewport framing). NOT a scope-creep across all 21
+      pillars. Phases 2/3 explicitly deferred.
+
+      WHAT SHIPPED
+      1) TILE 38 → 44 px
+         Slight zoom-in. Tiles + sprites read more clearly on mobile
+         (390×844 reference). Visible area drops from ~15 to ~10 tiles
+         vertically — matches the "compact open sectors" feel.
+
+      2) NEW VoidBackdrop component
+         /app/frontend/src/components/VoidBackdrop.tsx
+         A dark cyberpunk ambient layer that extends 27 TILES (~1188 px)
+         past every map edge. Contents:
+           • Base #06060e gradient (three vertical bands for depth)
+           • Faint grid lines @ 220px spacing — subtle "infinite ruined
+             cybercity" texture
+           • 90 deterministic "distant infrastructure lights" — tiny
+             pin-pricks of corrupted-purple / magenta / cyan / amber
+             scattered around the perimeter (no clutter inside the
+             playable map)
+           • Soft inner shadow at the playable-map edge to visually
+             distinguish play area from void without a hard line
+         Pure decorative layer. Zero impact on gameplay logic.
+
+      3) Wired into game.tsx world content as zIndex −1
+         Sits BELOW the tile grid + all sprites + atmosphere. When the
+         camera follows the player, the void scrolls with the world
+         giving a credible "the megacity stretches into the corrupted
+         darkness" impression. No more pure-black borders at any
+         camera position.
+
+      4) Controls band tightened
+         CONTROLS_BAND_HEIGHT 35 % → min(260 px, 30 %).  Gives the
+         viewport ~35 extra vertical pixels on tall phones, so the
+         play area fills more of the screen — directly addressing
+         the user's "tiny gameplay area" complaint.
+
+      VISUAL VERIFICATION (screenshots)
+        • Top half of viewport now shows dark cyberpunk void with
+          subtle grid + distant lights instead of pure black.
+        • AI surveillance sweep cuts cinematically across the void.
+        • Edge shadow softly frames the playable map.
+        • Faction-glow enemy, NPCs (PROF / JAX), corruption tiles,
+          Sapphire Core — all preserved & readable.
+
+      EXPLICITLY DEFERRED FROM QUANTUM REGISTRY PLAN
+        Phase 1 remaining (smaller items):
+          - Conduit-maze (Level 2B) is a different rendering paradigm
+            (backdrop image + invisible grid) and remains untouched
+            this round per user's "1 polished district > 10 unfinished"
+            rule. Will revisit once L1 polish is signed off.
+          - Movement-speed parity between screens (130 ms grid vs
+            60 fps RAF) — same reason; deferred.
+        Phase 2 (entity strategy):
+          - Class system rename (ROLES → ASSAULT/TANK/HACKER/SWARM/
+            CORRUPTION/SUPPORT)
+          - Terminology rename pass (ATTACK→EXECUTE etc.)
+          - Death/fallback flow
+          - Stronger vulnerability indicators (red flash + ring pulse)
+        Phase 3 (progression):
+          - Unique IV/personality/rarity stats per capture
+          - Independent entity leveling
+          - Ascension system
+        Phase 4 (expansion):
+          - Hidden rooms / shortcuts / mini-bosses / terminals
+        Phase 5 (polish):
+          - Full VFX juice pass
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+      Live preview /game confirmed on 390×844 mobile viewport.
+

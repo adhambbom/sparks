@@ -11,6 +11,7 @@ import Drawbridge from '../src/components/Drawbridge';
 import SpiralStaircase from '../src/components/SpiralStaircase';
 import CyberTile from '../src/components/cyber/CyberTile';
 import CyberProp from '../src/components/cyber/CyberProp';
+import VoidBackdrop from '../src/components/VoidBackdrop';
 import {
   CORRUPTION_SET,
   ROAD_SET,
@@ -34,7 +35,7 @@ import { getEnemyVisual } from '../src/systems/enemyVisual';
 import UnifiedSprite from '../src/components/UnifiedSprite';
 import { FACTIONS } from '../src/data/factions';
 
-const TILE = 38;
+const TILE = 44;
 const SPEED = 12; // pixels per frame (was 9 → another +33% on the overworld walk)
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
 const ROAM_TICK_MS = 800; // every 0.8s — slightly faster patrol cycle
@@ -763,8 +764,10 @@ export default function GameScreen() {
   // ──────────────────────────────────────────────────────────
   // HUD = ~125px (two rows). Controls = bottom 35% of total screen.
   // Game viewport sits between HUD bottom and controls top.
+  // Controls band is intentionally tight so the world fills as much of the
+  // phone screen as possible — Phase 1 Foundation: "fill the viewport".
   const HUD_HEIGHT = 125;
-  const CONTROLS_BAND_HEIGHT = SH * 0.35;
+  const CONTROLS_BAND_HEIGHT = Math.min(260, SH * 0.30);
   const VIEWPORT_HEIGHT = SH - HUD_HEIGHT - CONTROLS_BAND_HEIGHT;
   const VIEWPORT_TOP = HUD_HEIGHT;
 
@@ -799,6 +802,14 @@ export default function GameScreen() {
             height: ACADEMY_MAP.length * TILE,
           }}
         >
+          {/* Ambient cyberpunk void — extends 27 tiles past every map edge so
+              the camera never reveals pure-black borders. Pure decorative
+              layer, sits below the tile grid via zIndex -1. */}
+          <VoidBackdrop
+            mapWidth={ACADEMY_MAP[0].length * TILE}
+            mapHeight={ACADEMY_MAP.length * TILE}
+            padding={TILE * 27}
+          />
           {tileGrid}
           {/* No giant castle Image overlay — we are now INSIDE Castle V2.1.
               Stone walls (type 12) form the corridors and rooms; banners (13) decorate the throne chamber. */}
