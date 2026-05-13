@@ -443,7 +443,33 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      STALE-BUNDLE CRASH FIX.
+      UI READABILITY POLISH — Combat HUD audit + locked button metrics.
+
+      Style audit + tightening (app/combat.tsx):
+        • enemyNamePlate: minWidth 200→220, maxWidth 320, paddingV 5→6,
+          paddingH 8→10, marginBottom 6→8, opacity 0.85→0.92, internal
+          gap=2. Long names + boss tags no longer shove the layout.
+        • playerInfoPanel: gap=6 added so STABILITY/POWER bars never
+          kiss the name row. Opacity bumped 0.55→0.65 for contrast.
+        • bottomHud: paddingTop/paddingBottom split + gap=4 for cleaner
+          vertical rhythm between synergy strip and action grid.
+        • actionCell: added minHeight 44 (iOS touch-target minimum) so
+          the 3×2 grid stays uniform on smaller phones.
+        • synergyStrip: rowGap 3, columnGap 4 (was uniform 4) — multi-
+          line chip wrap stays compact; reduced paddingV 4→3.
+        • synergyChip: paddingH 5→6, opacity .55→.65, borderRadius 2.
+        • identityRow: rowGap 3 (was 4) keeps the deployed-entity
+          panel from growing unpredictably tall with 5 chips.
+        • idChip: paddingH 4→5, opacity 0.65→0.75, borderRadius 2.
+        • skillBtn: added minHeight 60.
+
+      Locked PixelButton metrics (src/components/PixelButton.tsx):
+        • New minHeight per size: sm=40, md=44, lg=56.
+        • Action grid buttons now have GUARANTEED equal height even
+          when text auto-fit shrinks long cyber words.
+
+      Bundle: 948 modules, clean.
+      No backend / API / schema changes.
 
       Root cause of the user-reported "setTurnsDeployed is not defined":
         • Code WAS already fixed (hooks present at L180-185, 5

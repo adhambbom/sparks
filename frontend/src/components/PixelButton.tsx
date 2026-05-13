@@ -43,6 +43,9 @@ export function PixelButton({
   const padV = size === 'sm' ? 8 : size === 'lg' ? 16 : 12;
   const padH = size === 'sm' ? 8 : size === 'lg' ? 28 : 20;
   const fontSize = size === 'sm' ? 11 : size === 'lg' ? 18 : 14;
+  // Locked min-height per size keeps action-grid + skill rows visually
+  // uniform regardless of text auto-fit shrinkage on long cyber words.
+  const minH = size === 'sm' ? 40 : size === 'lg' ? 56 : 44;
 
   const handlePress = () => {
     if (!silent) sfx.click();
@@ -60,6 +63,7 @@ export function PixelButton({
         {
           paddingVertical: padV,
           paddingHorizontal: padH,
+          minHeight: minH,
           borderColor: disabled ? COLORS.border : color,
           backgroundColor: disabled ? '#1a1a2e' : 'rgba(10,10,20,0.85)',
           opacity: disabled ? 0.5 : 1,

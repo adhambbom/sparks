@@ -1810,15 +1810,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     zIndex: 5,
   },
+  // ── ENEMY NAME PLATE ────────────────────────────────────────────
+  // Top-of-screen panel with the enemy faction + tier. Locked width
+  // bands so long names + boss tags don't shove the layout around.
   enemyNamePlate: {
-    backgroundColor: 'rgba(8, 14, 24, 0.85)',
+    backgroundColor: 'rgba(8, 14, 24, 0.92)',
     borderWidth: 2,
     borderColor: COLORS.borderHi,
     borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginBottom: 6,
-    minWidth: 200,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+    minWidth: 220,
+    maxWidth: 320,
+    gap: 2,
   },
   // Player block — pinned BOTTOM-RIGHT, sitting just above the bottom HUD.
   playerAnchor: {
@@ -2048,7 +2053,9 @@ const styles = StyleSheet.create({
     minHeight: 38,
     zIndex: 1,
   },
-  // (3) Player-info panel: green-outlined stats card per the new layout spec.
+  // ── PLAYER INFO PANEL — locked padding + consistent vertical rhythm.
+  //   • Same border thickness as enemyNamePlate (2) for visual rhyme.
+  //   • Gap=6 keeps STABILITY/POWER bars from kissing the name row.
   playerInfoPanel: {
     width: '100%',
     marginBottom: 10,
@@ -2056,18 +2063,25 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#4CAF50',
     borderRadius: 6,
-    backgroundColor: 'rgba(10, 18, 12, 0.55)',
+    backgroundColor: 'rgba(10, 18, 12, 0.65)',
+    gap: 6,
     zIndex: 2,
   },
   bottomHud: {
     backgroundColor: COLORS.panel,
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingTop: 10,
+    paddingBottom: 12,
+    gap: 4,
   },
   statRow: { flexDirection: 'row', alignItems: 'center' },
   statusIcons: { gap: 2, alignItems: 'flex-end' },
-  // (4) Action menu — 3×2 grid (6 buttons: ATTACK/SKILL/ITEM // TAME/CALL/RUN).
-  //     RN-Web has no `display: grid`, so we fake it with flex-wrap + 32%-width cells.
+  // ── ACTION GRID (3×2) ───────────────────────────────────────────
+  // Locked metrics — every button is exactly the same width AND height
+  // so the grid reads cleanly even with mixed label lengths.
+  //   • flexBasis: 32%  — three columns with a 6px gap between them.
+  //   • rowGap: 8       — vertical breathing room between rows.
+  //   • minHeight via actionCell — guarantees uniform button height.
   actionGrid: {
     width: '100%',
     flexDirection: 'row',
@@ -2076,47 +2090,55 @@ const styles = StyleSheet.create({
     columnGap: 6,
     zIndex: 2,
   },
-  // Cell width uses calc-style flex math: (100% - 2 gaps of 6px) / 3 cols.
-  // Using flexBasis keeps alignment perfectly even across all phones.
   actionCell: {
     flexGrow: 0,
     flexShrink: 0,
     flexBasis: '32%',
+    minHeight: 44, // iOS touch-target minimum, enforced even on smaller phones
   },
   skillsRow: { gap: 8, paddingVertical: 6 },
-  // ── Synergy strip — shows active operator passives next to corruption stack count.
+  // ── SYNERGY STRIP ───────────────────────────────────────────────
+  // Sits directly ABOVE the action grid. Tight 3px row gap so multi-line
+  // chip wrap stays compact and never pushes the action grid offscreen.
   synergyStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     paddingHorizontal: 4,
-    paddingVertical: 4,
-    gap: 4,
-    marginBottom: 4,
+    paddingVertical: 3,
+    rowGap: 3,
+    columnGap: 4,
+    marginBottom: 6,
   },
   synergyChip: {
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderWidth: 1,
     borderColor: '#c46cff',
-    backgroundColor: 'rgba(40,15,70,0.55)',
+    backgroundColor: 'rgba(40,15,70,0.65)',
+    borderRadius: 2,
   },
-  // ── Identity row — signature + trait chips under deployed entity name.
+  // ── IDENTITY ROW — signature + trait + rarity + passive chips.
+  //   rowGap kept tight (3) so the deployed entity panel never grows
+  //   unpredictably tall on narrow phones.
   identityRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 4,
+    rowGap: 3,
+    columnGap: 4,
+    marginTop: 5,
   },
   idChip: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderWidth: 1,
-    backgroundColor: 'rgba(10,10,20,0.65)',
+    backgroundColor: 'rgba(10,10,20,0.75)',
+    borderRadius: 2,
   },
   skillBtn: {
     backgroundColor: 'rgba(10,10,20,0.9)',
     borderWidth: 2, padding: 10,
     minWidth: 130, maxWidth: 150,
+    minHeight: 60,
   },
 });
