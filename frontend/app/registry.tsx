@@ -63,7 +63,7 @@ export default function RegistryScreen() {
       <ScrollView contentContainerStyle={styles.body}>
         {/* ── PARTY (top) ─────────────────────────────────────────── */}
         <PixelText size={12} color={COLORS.neonYellow} bold>
-          NANO-COMPUTER · ACTIVE PARTY ({q.party.length}/{MAX_PARTY})
+          NANO-COMPUTER · ACTIVE NETWORK ({q.party.length}/{MAX_PARTY})
         </PixelText>
         {q.party.length === 0 && (
           <PixelText size={10} color={COLORS.textDim} style={{ marginTop: 4 }}>

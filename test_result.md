@@ -1086,3 +1086,69 @@ agent_communication:
 
       No backend changes. No new packages. Bundle compiles cleanly.
 
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  PHASE 2 POLISH — STABILITY Bar + Cyber Sweep                  ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Follow-up to Phase 2 ship. Polished the tactical-feel items that
+      the user prioritized first.
+
+      1) STABILITY BAR on the deployed entity (CRITICAL TACTICAL FIX)
+         The deploy panel now shows a STAT BAR for the active entity's
+         transient STABILITY pool:
+           • Magenta when fresh (>50%)
+           • Amber when threatened (25–50%)
+           • Red when critical (<25%)
+           • Displays "STAB X / Y" inline.
+         This is the visibility piece that was missing — players can
+         now SEE when to swap entities before the disconnection event.
+
+      2) CYBER TERMINOLOGY SWEEP (non-combat screens)
+         game.tsx HUD:
+            "XP X/Y"  →  "DATA X/Y"
+            MENU: HP/MP labels → "STAB X/Y" + "PWR X/Y"
+            "⚠ SPIKE TRAP! -10 HP"  →  "⚠ ION SPIKES! -10 STABILITY"
+            "CONSOLE ACTIVATED · +40 HP"  →  "CONSOLE ACTIVATED · +40 STABILITY"
+         combat.tsx:
+            "LEVEL UP! +1 Skill Point"  →  "VERSION UPGRADE! +1 Protocol Slot"
+            Deploy panel "MINION:" header  →  "ENTITY:"
+            ROLE label now uses the new class names (ASSAULT/HACKER/
+            CORRUPTION/SWARM).
+         registry.tsx:
+            "ACTIVE PARTY (X/Y)"  →  "ACTIVE NETWORK (X/Y)"
+         conduit-maze.tsx:
+            HUD "PARTY" header  →  "NETWORK"
+
+      VERIFICATION (Playwright screenshot at /game)
+         • HUD now reads "DATA 0/100" instead of "XP …"
+         • Cyberpunk pavement, void backdrop, AI sweep, faction-glow
+           enemy/NPCs, player chibi — all preserved.
+         • Atmospheric darkness, distant infrastructure lights still
+           cinematic in the void.
+
+      WHAT THIS UNLOCKS
+        ✅ Tactical visibility: the player can NOW watch their entity's
+            STABILITY tick down and pre-emptively redeploy/swap.
+        ✅ Vocabulary is fully cyber: no more "XP / HP / MP / PARTY"
+            anywhere visible on screen during normal play.
+        ✅ Class identity is consistent everywhere (ASSAULT, TANK,
+            HACKER, SUPPORT, CORRUPTION, SWARM).
+
+      STILL ON THE PHASE-2 POLISH BACKLOG (next deeper polish round)
+        - Per-turn STATUS-EFFECT TICKS (data exists in STATUSES;
+          combat loop needs an active-statuses array per combatant +
+          a tick function that runs on turnEnd).
+        - STATUS ICON ROW above each combatant (uses the icon glyph
+          already defined per status).
+        - COOLDOWN COUNTERS on SIGNATURE abilities (currently any-
+          time-usable; SIGNATURES map already declares cooldown turns
+          per ability).
+        - REBOOT (revive) utility item — restore a disconnected entity
+          mid-fight at a POWER GRID cost.
+        - Final fantasy-term audit on inventory/shop/character-create
+          screens.
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+

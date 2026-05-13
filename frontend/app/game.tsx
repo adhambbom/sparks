@@ -455,7 +455,7 @@ export default function GameScreen() {
       // Spike pad damage trigger
       sfx.damage();
       applyDamage(10);
-      setHint('⚠ SPIKE TRAP! -10 HP');
+      setHint('⚠ ION SPIKES! -10 STABILITY');
       setTimeout(() => setHint(''), 1500);
     } else setHint('');
     // Random encounter (only on floor type 0)
@@ -554,7 +554,7 @@ export default function GameScreen() {
           },
         });
       }
-      setHint('CONSOLE ACTIVATED · +40 HP');
+      setHint('CONSOLE ACTIVATED · +40 STABILITY');
       setTimeout(() => setHint(''), 2000);
       saveCheckpoint();
       return;
@@ -1116,7 +1116,7 @@ export default function GameScreen() {
           </View>
           <View style={styles.hudRight}>
             <PixelText size={9} color={COLORS.neonYellow} bold>{state.player.gold}G</PixelText>
-            <PixelText size={7} color={COLORS.xp} style={{ marginTop: 2 }}>XP{state.player.xp}/{state.player.xpToNext}</PixelText>
+            <PixelText size={7} color={COLORS.xp} style={{ marginTop: 2 }}>DATA{state.player.xp}/{state.player.xpToNext}</PixelText>
           </View>
         </View>
         <View style={styles.hudShortcutsRow}>
@@ -1212,8 +1212,8 @@ export default function GameScreen() {
               <PixelText size={11} color={COLORS.text}>{state.player.name.toUpperCase()}</PixelText>
               <PixelText size={11} color={COLORS.neonCyan}>LV {state.player.level}</PixelText>
             </View>
-            <View style={styles.menuStat}><PixelText size={10} color={COLORS.textDim}>HP</PixelText><PixelText size={10} color={COLORS.hp}>{state.player.hp}/{state.player.maxHp}</PixelText></View>
-            <View style={styles.menuStat}><PixelText size={10} color={COLORS.textDim}>MP</PixelText><PixelText size={10} color={COLORS.mp}>{state.player.mp}/{state.player.maxMp}</PixelText></View>
+            <View style={styles.menuStat}><PixelText size={10} color={COLORS.textDim}>STAB</PixelText><PixelText size={10} color={COLORS.hp}>{state.player.hp}/{state.player.maxHp}</PixelText></View>
+            <View style={styles.menuStat}><PixelText size={10} color={COLORS.textDim}>PWR</PixelText><PixelText size={10} color={COLORS.mp}>{state.player.mp}/{state.player.maxMp}</PixelText></View>
             <View style={styles.menuStat}><PixelText size={10} color={COLORS.textDim}>ATK / DEF / SPD</PixelText><PixelText size={10} color={COLORS.text}>{state.player.atk}/{state.player.def}/{state.player.spd}</PixelText></View>
             <View style={styles.menuStat}><PixelText size={10} color={COLORS.textDim}>GOLD</PixelText><PixelText size={10} color={COLORS.neonYellow}>{state.player.gold}G</PixelText></View>
             <View style={styles.menuStat}><PixelText size={10} color={COLORS.textDim}>SKILL POINTS</PixelText><PixelText size={10} color={COLORS.neonMagenta}>{state.player.skillPoints}</PixelText></View>

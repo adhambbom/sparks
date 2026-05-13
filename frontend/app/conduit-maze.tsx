@@ -604,7 +604,7 @@ export default function ConduitMazeScreen() {
             onPress={() => { sfx.click?.(); router.push('/registry'); }}
             testID="hud-party"
           >
-            <PixelText size={9} color={COLORS.neonMagenta} bold>PARTY</PixelText>
+            <PixelText size={9} color={COLORS.neonMagenta} bold>NETWORK</PixelText>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.shortcutBtn, { borderColor: COLORS.neonYellow }]}

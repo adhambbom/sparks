@@ -626,7 +626,7 @@ export default function CombatScreen() {
     pushLog(`Victory! +${enemyData.xp} DATA, +${enemyData.gold}G`);
     addGold(enemyData.gold);
     const leveled = awardXp(enemyData.xp);
-    if (leveled) { sfx.levelUp(); pushLog('LEVEL UP! +1 Skill Point.'); }
+    if (leveled) { sfx.levelUp(); pushLog('VERSION UPGRADE! +1 Protocol Slot.'); }
     // Drops
     const drops: string[] = [];
     enemyData.drops?.forEach((d) => {
@@ -945,11 +945,30 @@ export default function CombatScreen() {
               </View>
               <View style={{ flex: 1, paddingLeft: 8, borderLeftWidth: 2, borderColor: COLORS.border }}>
                 <PixelText size={11} color={COLORS.neonYellow} bold>DEPLOYED</PixelText>
-                <PixelText size={11} color={COLORS.neonYellow} bold>MINION:</PixelText>
+                <PixelText size={11} color={COLORS.neonYellow} bold>ENTITY:</PixelText>
                 <View style={{ height: 4 }} />
                 <PixelText size={11} color={COLORS.neonMagenta} bold>{deployedMinion.name.toUpperCase()}</PixelText>
-                <PixelText size={9} color={COLORS.textDim}>
-                  Lv{deployedMinion.level} · ATK {deployedMinion.atk} · DEF {deployedMinion.def}
+                {/* STABILITY bar — visible HP gauge so the player can see when
+                    the entity is about to disconnect. This is the core tactical
+                    feedback for the entity-tank mechanic. */}
+                <View style={{ marginTop: 3 }}>
+                  <StatBar
+                    value={minionHp}
+                    max={minionMaxHp}
+                    color={
+                      minionHp / Math.max(1, minionMaxHp) < 0.25 ? '#ff5555'
+                        : minionHp / Math.max(1, minionMaxHp) < 0.5 ? '#ffb24c'
+                        : COLORS.neonMagenta
+                    }
+                    bgColor={COLORS.hpBg}
+                    width={130}
+                    height={7}
+                    showText
+                    label="STAB"
+                  />
+                </View>
+                <PixelText size={9} color={COLORS.textDim} style={{ marginTop: 2 }}>
+                  Lv{deployedMinion.level} · ATK {deployedMinion.atk} · {ROLES[getSpeciesKit(deployedMinion.speciesId).role].label}
                 </PixelText>
               </View>
             </View>
