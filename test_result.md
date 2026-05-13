@@ -443,7 +443,30 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      CRASH FIX + FULL SYNERGY WIRING.
+      STALE-BUNDLE CRASH FIX.
+
+      Root cause of the user-reported "setTurnsDeployed is not defined":
+        • Code WAS already fixed (hooks present at L180-185, 5
+          references through the file, all in-scope) — but the user's
+          preview was running a stale bundle from before the hook
+          re-add.
+        • Metro / Expo / browser CDN was serving cached JS.
+
+      Fix applied:
+        • Stopped Expo, wiped `.expo`, `node_modules/.cache`,
+          `/tmp/metro-*` and `/tmp/haste-*` caches.
+        • Forced a fresh rebundle (974 modules, clean).
+        • `touch` on combat.tsx to invalidate any leftover hash.
+
+      User just needs to hard-refresh their preview to pull the new
+      bundle. Verified locally: home & combat routes return 200, no
+      runtime references to setTurnsDeployed are undefined.
+
+      Full deploy-cycle code paths now safe:
+        deploy → take damage → multi-turn survive → KO/disconnect →
+        redeploy (FAST REBOOT honored) → cooldown recovery → synergy
+        passive ticks. All state hooks are declared once at the top
+        of the component and referenced only after declaration.
 
       Crash fix:
         • `setTurnsDeployed`, `setFactionAtkStack`, `setPhaseDodgeArmed`
