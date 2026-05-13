@@ -443,7 +443,42 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      SIGNATURE ENTITY IDENTITIES shipped.
+      PROGRESSION ADDICTION LOOP shipped — IVs · Rarity · DATA Leveling.
+
+      New data file: src/data/entityProgression.ts
+        • IVs: hidden 0..31 per stat (hp/atk/def/spd) rolled at capture.
+        • RARITY: weighted at capture time
+            common 70% / rare 22% / glitched 7% / ascended 1%
+          Drives statMult (1.00/1.10/1.25/1.45) + xpMult.
+        • Pure helpers: rollIVs, rollRarity, ivQualityTag,
+          effectiveStat (base * statMult * levelScale + iv*0.5),
+          applyEntityXp.
+        • IV quality tags drive UI urgency:
+            ROUGH / STABLE / PRIMED / OVERTUNED / GOD ROLL
+
+      QuantumStorage.buildCapturedMinion now rolls and persists:
+        ivs, rarity, dataLevel, dataXp, dataXpToNext, baseLevel.
+      All fields OPTIONAL — legacy saves continue to work (fallback
+      treats them as common / dataLevel = level).
+
+      GameContext additions:
+        • `awardEntityXp(uid, amount)` — atomically grants DATA xp
+          to a specific captured entity in party OR extendedStorage.
+          Returns { leveled, gained, level } for sfx + log lines.
+
+      Combat wiring:
+        • Deploy now applies effectiveStat to atk/def/hp/spd so a
+          GLITCHED entity outperforms a fresh COMMON of same species.
+        • On victory, the surviving deployed entity gets 70% of the
+          enemy DATA reward, multiplied by its rarity's xpMult.
+        • Header now shows rarity chip + DLV + IV quality tag.
+        • Deploy roster cards show rarity + quality badges so the
+          player can pick their best entity at a glance.
+
+      No API surface change. 13/13 backend round-trip tests PASS
+      (IVs / rarity / dataLevel / dataXp / dataXpToNext / baseLevel
+      all persist through save + checkpoint cycles).
+      Frontend bundle: 948 modules, clean.
 
       New data file: src/data/entitySignatures.ts
         • 5 SIGNATURE MOVES (one per faction):
