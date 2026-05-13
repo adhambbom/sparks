@@ -37,6 +37,75 @@ export type EntitySignature = {
   statusTurns?: number;
 };
 
+/**
+ * FACTION CORRUPTION PASSIVE
+ *
+ * Each faction projects an eerie, distinctive background behavior
+ * while one of its entities is deployed. These are NOT skill button
+ * effects — they fire automatically every turn the entity stays
+ * online, giving each faction a memorable battlefield identity
+ * beyond its raw stats.
+ *
+ *   corrupted_ai  → BLEED THOUGHT   psi residue dmg every 2nd turn
+ *   cyber_mutant  → PHASE FRAY      occasional dodge of incoming dmg
+ *   industrial_bot→ RUST AURA       enemy ATK decays while deployed
+ *   rogue_military→ KINETIC CHARGE  entity ATK ramps while deployed
+ *   player        → (no passive — fallback only)
+ */
+export type FactionPassiveKind = 'bleed_thought' | 'phase_fray' | 'rust_aura' | 'kinetic_charge' | 'none';
+
+export type FactionPassive = {
+  kind: FactionPassiveKind;
+  name: string;
+  flavor: string;
+  effectText: string;
+  glyph: string;
+  color: string;
+};
+
+export const FACTION_PASSIVE: Record<FactionId, FactionPassive> = {
+  corrupted_ai: {
+    kind: 'bleed_thought',
+    name: 'BLEED THOUGHT',
+    flavor: 'Hallucinated subroutines leak into the enemy\'s stack.',
+    effectText: 'Every 2 turns deployed: enemy takes 3 residual dmg.',
+    glyph: '✦',
+    color: '#c46cff',
+  },
+  cyber_mutant: {
+    kind: 'phase_fray',
+    name: 'PHASE FRAY',
+    flavor: 'Frames stutter. Some hits never land.',
+    effectText: '12% chance each enemy turn: dodge all damage.',
+    glyph: '◈',
+    color: '#5cf7ff',
+  },
+  industrial_bot: {
+    kind: 'rust_aura',
+    name: 'RUST AURA',
+    flavor: 'Forced repair cycles corrode the enemy\'s power output.',
+    effectText: 'Enemy ATK −1 per turn deployed (max −5).',
+    glyph: '▣',
+    color: '#ffb24c',
+  },
+  rogue_military: {
+    kind: 'kinetic_charge',
+    name: 'KINETIC CHARGE',
+    flavor: 'Capacitors charge with every idle frame.',
+    effectText: 'Entity ATK +1 per turn deployed (max +5).',
+    glyph: '▲',
+    color: '#ff6b6b',
+  },
+  player: {
+    kind: 'none',
+    name: '—',
+    flavor: '',
+    effectText: '',
+    glyph: '',
+    color: '#888',
+  },
+};
+
 export const SIGNATURE_BY_FACTION: Record<FactionId, EntitySignature> = {
   // Glitched neural malware — psi disruption.
   corrupted_ai: {

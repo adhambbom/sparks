@@ -26,7 +26,7 @@ import { getEnemyVisual } from '../src/systems/enemyVisual';
 import UnifiedSprite from '../src/components/UnifiedSprite';
 import { FACTIONS, FactionId } from '../src/data/factions';
 import { computeSynergy, summarizeActiveSynergy } from '../src/data/operatorSynergy';
-import { getEntityIdentity, SIGNATURE_BY_FACTION } from '../src/data/entitySignatures';
+import { getEntityIdentity, SIGNATURE_BY_FACTION, FACTION_PASSIVE } from '../src/data/entitySignatures';
 import {
   RARITY_META,
   effectiveStat,
@@ -301,8 +301,13 @@ export default function CombatScreen() {
       atkFaction = kit.faction;
       // ── OPERATOR SYNERGY: OVERCLOCK ──────────────────────────────
       // synergy.entityAtkMod stacks all overclock node bonuses (+12%/+25%).
+      // KINETIC CHARGE faction passive (rogue_military) adds a per-turn
+      // +1 atk ramp via `factionAtkStack` (capped at +5).
+      const kinetic = FACTION_PASSIVE[kit.faction].kind === 'kinetic_charge'
+        ? factionAtkStack
+        : 0;
       atkStat = Math.round(
-        deployedMinion.atk * ROLES[kit.role].mods.atk * (1 + synergy.entityAtkMod),
+        (deployedMinion.atk + kinetic) * ROLES[kit.role].mods.atk * (1 + synergy.entityAtkMod),
       );
       critBonus = ROLES[kit.role].critBonus + synergy.entityCritChance;
     }
@@ -492,10 +497,19 @@ export default function CombatScreen() {
         if (minion) {
           const { slot } = addCapturedMinion(minion);
           sfx.victory();
-          pushLog(`★ Quarantined ${enemyData.name}!`);
-          pushLog(slot === 'party' ? 'Added to active party.' : 'Sent to Extended Storage.');
+          // ── EXTRACTED — eerie cyber terminology, not Pokémon "captured".
+          // Roll the variance + archive grade into the log so the player
+          // FEELS the result of every illegal recovery.
+          const rarity = minion.rarity ?? 'common';
+          const rLabel = RARITY_META[rarity].label;
+          pushLog(`▣ ${enemyData.name.toUpperCase()} EXTRACTED — ARCHIVE GRADE: ${rLabel}`);
+          if (minion.ivs) {
+            const tag = ivQualityTag(minion.ivs).label;
+            pushLog(`▸ SIGNAL QUALITY: ${tag}`);
+          }
+          pushLog(slot === 'party' ? 'Routed to active loadout.' : 'Sent to cold storage.');
         }
-        // End battle as capture-victory (no XP/gold per design — capture IS the reward).
+        // End battle as capture-victory (no XP/gold per design — extract IS the reward).
         setEnemyHp(0);
         setTurn('end');
         saveToServer();
@@ -509,7 +523,7 @@ export default function CombatScreen() {
       }, 350);
     } else {
       sfx.cancel();
-      pushLog('It broke free!');
+      pushLog('Containment failed — signal slipped.');
       setTimeout(() => endPlayerTurn(), 320);
     }
   };
@@ -554,6 +568,9 @@ export default function CombatScreen() {
     setTraitFirstAttackUsed(false);
     setTraitFirstSkillUsed(false);
     setTraitRelayTick(0);
+    setTurnsDeployed(0);
+    setFactionAtkStack(0);
+    setPhaseDodgeArmed(false);
     // ── OPERATOR SYNERGY: PRIORITY (slot bonus next turn) ──────────
     // No state needed yet — combat's existing fast-priority is implicit.
     // The PRIORITY node simply guarantees the entity acts first which the
@@ -689,6 +706,58 @@ export default function CombatScreen() {
       }
       setCorruptionTurns((c) => c - 1);
     }
+    // ── FACTION CORRUPTION PASSIVES ──────────────────────────────
+    // Run once per player turn while an entity is deployed. Each
+    // faction projects a different battlefield behavior, giving each
+    // species a memorable identity beyond raw stat differences.
+    if (deployedMinion && enemyHp > 0) {
+      const k = getSpeciesKit(deployedMinion.speciesId);
+      const passive = FACTION_PASSIVE[k.faction];
+      const newCount = turnsDeployed + 1;
+      setTurnsDeployed(newCount);
+      switch (passive.kind) {
+        case 'bleed_thought': {
+          // Every 2nd turn: residual psi dmg to enemy.
+          if (newCount % 2 === 0) {
+            const dmg = 3;
+            setEnemyHp((hp) => Math.max(0, hp - dmg));
+            showFloater(`-${dmg}✦`, passive.color, 'e');
+            pushLog(`${passive.name} leaks through — ${dmg} dmg.`);
+          }
+          break;
+        }
+        case 'phase_fray': {
+          // 12% chance to arm a one-shot dodge for the NEXT enemy hit.
+          if (!phaseDodgeArmed && Math.random() < 0.12) {
+            setPhaseDodgeArmed(true);
+            showFloater('PHASE+', passive.color, 'p');
+          }
+          break;
+        }
+        case 'rust_aura': {
+          // Reapply enemy defense_down — uses existing enemyDefDebuff
+          // pipeline so it stacks gracefully with other debuffs.
+          // Stack max +5 turns.
+          if (factionAtkStack < 5) {
+            setFactionAtkStack((s) => s + 1);
+            setEnemyDefDebuff((d) => Math.min(5, d + 1));
+            if (newCount % 2 === 0) showFloater('CORRODED', passive.color, 'e');
+          }
+          break;
+        }
+        case 'kinetic_charge': {
+          // Stack +1 atk per turn (cap 5). Applied via the read path in
+          // playerAttack — see `kinetic` calculation there.
+          if (factionAtkStack < 5) {
+            setFactionAtkStack((s) => s + 1);
+            if (newCount === 1 || newCount % 2 === 0) {
+              showFloater(`+${factionAtkStack + 1} ATK`, passive.color, 'p');
+            }
+          }
+          break;
+        }
+      }
+    }
     setTimeout(() => {
       if (enemyHp <= 0) { onVictory(); return; }
       // If haste, player goes again
@@ -752,6 +821,18 @@ export default function CombatScreen() {
       // player is prompted to deploy another or continue solo.
       let dmgToPlayer = dmg;
       if (deployedMinion && minionHp > 0) {
+        // ── FACTION PASSIVE: PHASE FRAY (cyber_mutant) ────────────
+        // If armed, this incoming hit is dodged entirely. Flag is set
+        // each turn by endPlayerTurn at 12% chance.
+        if (phaseDodgeArmed) {
+          setPhaseDodgeArmed(false);
+          showFloater('PHASED', '#5cf7ff', 'p');
+          pushLog(`${deployedMinion.name} phase-shifts — hit voided.`);
+          shakeAnim(playerShake);
+          dmg = 0;
+          dmgToPlayer = 0;
+          // Skip the rest of the absorb pipeline; continue turn flow.
+        } else {
         // ── SYNERGY: BUFFER (entity dmg reduction) ───────────────────
         // Stack from STABILITY branch: -10% / -10%+leech. Floor at 1.
         let absorbedDmg = Math.max(
@@ -811,6 +892,7 @@ export default function CombatScreen() {
           }
         }
         if (operatorShare === 0) dmgToPlayer = 0;
+        }
       } else {
         applyDamage(dmg);
         showFloater(`-${dmg}`, COLORS.neonRed, 'p');
@@ -1187,6 +1269,7 @@ export default function CombatScreen() {
                   const rMeta = RARITY_META[rarity];
                   const ivTag = deployedMinion.ivs ? ivQualityTag(deployedMinion.ivs) : null;
                   const dLvl = deployedMinion.dataLevel ?? deployedMinion.level;
+                  const fp = FACTION_PASSIVE[ident.faction];
                   return (
                     <View style={styles.identityRow}>
                       <View style={[styles.idChip, { borderColor: rMeta.rim, backgroundColor: rMeta.bg }]}>
@@ -1209,6 +1292,13 @@ export default function CombatScreen() {
                           {ident.trait.glyph} {ident.trait.name}
                         </PixelText>
                       </View>
+                      {fp.kind !== 'none' && (
+                        <View style={[styles.idChip, { borderColor: fp.color, backgroundColor: 'rgba(40,15,55,0.55)' }]}>
+                          <PixelText size={7} color={fp.color} bold>
+                            {fp.glyph} {fp.name}{factionAtkStack > 0 ? `×${factionAtkStack}` : ''}
+                          </PixelText>
+                        </View>
+                      )}
                     </View>
                   );
                 })()}

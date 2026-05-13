@@ -443,7 +443,40 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      PROGRESSION ADDICTION LOOP shipped — IVs · Rarity · DATA Leveling.
+      TONE LOCK + FACTION CORRUPTION BEHAVIORS shipped.
+
+      Terminology overhaul (away from Pokémon/fantasy language):
+        • IV quality tags rewritten as forensic / illegal-AI terms:
+            ROUGH       → DECAYED
+            STABLE      → STABLE TRACE
+            PRIMED      → CLEAN SIGNAL
+            OVERTUNED   → GHOST CODE
+            GOD ROLL    → NULL STATE
+        • New constant SYNTH_VARIANCE_LABEL = 'SYNTHETIC VARIANCE'
+          replaces "IVs" in any user-facing copy.
+        • Capture log strings reworked:
+            "★ Quarantined X!" → "▣ X EXTRACTED — ARCHIVE GRADE: …"
+                                "▸ SIGNAL QUALITY: …"
+            "It broke free!"   → "Containment failed — signal slipped."
+            "Added to active party." → "Routed to active loadout."
+
+      Faction Corruption Passives (entity identity > stats):
+        • New data block FACTION_PASSIVE in entitySignatures.ts:
+            corrupted_ai  → BLEED THOUGHT (every 2 turns: 3 residual dmg)
+            cyber_mutant  → PHASE FRAY (12% per turn: arm one-shot dodge)
+            industrial_bot→ RUST AURA (stack enemy DEF/ATK debuff, max 5)
+            rogue_military→ KINETIC CHARGE (entity ATK +1/turn, max 5)
+        • Wired into combat.tsx:
+            - Tick runs in endPlayerTurn each turn entity is deployed.
+            - PHASE FRAY voids the next enemy hit if armed.
+            - KINETIC CHARGE applied via factionAtkStack in playerAttack.
+            - State resets cleanly on each new deploy.
+        • Deployed entity HUD now shows a 5th chip:
+            ◇ PASSIVE NAME (×stack count for stacking passives)
+          giving each faction a visible, memorable battlefield identity.
+
+      No API surface change. No schema impact.
+      Frontend bundle compiles clean. Combat + home routes 200 OK.
 
       New data file: src/data/entityProgression.ts
         • IVs: hidden 0..31 per stat (hp/atk/def/spd) rolled at capture.

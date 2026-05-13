@@ -75,33 +75,45 @@ export function rollIVs(): EntityIVs {
   return { hp: r(), atk: r(), def: r(), spd: r() };
 }
 
-/** Quick "perfect IV" summary — for the registry sort/filter. */
+/**
+ * Quick "perfect variance" summary — used by the registry sort/filter.
+ * (We still expose `ivQualityTag` for UI but rename the cyber-facing
+ * label to remove the "god-roll" gambling/RPG language.)
+ */
 export function ivTotal(iv: EntityIVs): number {
   return iv.hp + iv.atk + iv.def + iv.spd;
 }
 
-/** 0..1 normalised IV quality score. Used for "GOD ROLL" tag in UI. */
+/** 0..1 normalised variance score — drives the UI tag. */
 export function ivQualityPct(iv: EntityIVs): number {
   return ivTotal(iv) / (31 * 4);
 }
 
 /**
- * IV quality classification. Drives a small text tag next to the
- * rarity badge so the player IMMEDIATELY feels each capture's roll:
- *   < 40%   → "ROUGH"     dim grey
- *   < 65%   → "STABLE"    text default
- *   < 85%   → "PRIMED"    cyan
- *   < 95%   → "OVERTUNED" magenta
- *   ≥ 95%   → "GOD ROLL"  gold + pulse
+ * SYNTHETIC VARIANCE classification.
+ *
+ * The "core grade" of an extracted entity. Replaces the previous
+ * fantasy-style "god roll / overtuned / primed" labels with cold
+ * forensic terminology so a fresh capture reads like a corrupted
+ * binary, not a Pokémon trade screen:
+ *
+ *   < 40%   → "DECAYED"        dim grey (broken / unstable thread)
+ *   < 65%   → "STABLE TRACE"   default text
+ *   < 85%   → "CLEAN SIGNAL"   cyan (acceptable for deploy)
+ *   < 95%   → "GHOST CODE"     magenta (hidden subroutines intact)
+ *   ≥ 95%   → "NULL STATE"     gold (mythic — anomaly-grade extract)
  */
 export function ivQualityTag(iv: EntityIVs): { label: string; color: string } {
   const q = ivQualityPct(iv);
-  if (q >= 0.95) return { label: 'GOD ROLL',  color: '#ffd24a' };
-  if (q >= 0.85) return { label: 'OVERTUNED', color: '#c46cff' };
-  if (q >= 0.65) return { label: 'PRIMED',    color: '#5cb3ff' };
-  if (q >= 0.40) return { label: 'STABLE',    color: '#a0a4b4' };
-  return                  { label: 'ROUGH',     color: '#6a6e80' };
+  if (q >= 0.95) return { label: 'NULL STATE',  color: '#ffd24a' };
+  if (q >= 0.85) return { label: 'GHOST CODE',  color: '#c46cff' };
+  if (q >= 0.65) return { label: 'CLEAN SIGNAL', color: '#5cb3ff' };
+  if (q >= 0.40) return { label: 'STABLE TRACE', color: '#a0a4b4' };
+  return                  { label: 'DECAYED',     color: '#6a6e80' };
 }
+
+/** UI label for the variance system itself (replaces "IVs"). */
+export const SYNTH_VARIANCE_LABEL = 'SYNTHETIC VARIANCE';
 
 // ── EFFECTIVE STAT FORMULA ──────────────────────────────────────────
 // Inspired by Pokémon's stat formula but flattened for our tier system:
