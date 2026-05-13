@@ -172,6 +172,17 @@ export default function CombatScreen() {
   const [traitFirstAttackUsed, setTraitFirstAttackUsed] = useState(false);
   const [traitFirstSkillUsed, setTraitFirstSkillUsed] = useState(false);
   const [traitRelayTick, setTraitRelayTick] = useState(0);
+  // ── FACTION CORRUPTION PASSIVE STATE ────────────────────────────
+  // Reset on every fresh deploy. `turnsDeployed` tallies for the
+  // BLEED THOUGHT cadence. `factionAtkStack` is the shared counter for
+  // RUST AURA (debuff stack on enemy) and KINETIC CHARGE (entity buff).
+  // `phaseDodgeArmed` is the PHASE FRAY one-shot dodge gate.
+  const [turnsDeployed, setTurnsDeployed] = useState(0);
+  const [factionAtkStack, setFactionAtkStack] = useState(0);
+  const [phaseDodgeArmed, setPhaseDodgeArmed] = useState(false);
+  // MIRROR-PING (synergy): grants the player a free turn after a deploy
+  // by short-circuiting one upcoming enemy turn.
+  const [priorityFreeTurn, setPriorityFreeTurn] = useState(false);
 
   // ── ACTIVE STATUS EFFECTS ─────────────────────────────────────────
   // Lists of currently-applied STATUSES on enemy / player. Each entry
@@ -543,10 +554,29 @@ export default function CombatScreen() {
       sfx.cancel();
       return;
     }
+    // ── OPERATOR SYNERGY: HANDSHAKE / NULL CALL — deploy PWR cost ──
+    // Base deploy cost is 6 POWER GRID. Cheaper with HANDSHAKE (−2) and
+    // NULL CALL (additional −2 → total −4). Floor at 0. If the operator
+    // doesn't have enough PWR the deploy fails (audible cancel).
+    const baseDeployCost = 6;
+    const deployCost = Math.max(0, baseDeployCost + synergy.deployPwrCostMod);
+    if (state && state.player.mp < deployCost) {
+      pushLog(`Insufficient POWER GRID for deploy (need ${deployCost}).`);
+      sfx.cancel();
+      return;
+    }
+    if (deployCost > 0) {
+      applyMpCost(deployCost);
+      if (deployCost < baseDeployCost) {
+        pushLog(`▸ HANDSHAKE patched — deploy cost ${deployCost} (was ${baseDeployCost}).`);
+      }
+    }
+    // ── OPERATOR SYNERGY: FAST REBOOT — redeploy stab pct ──────────
+    // A minion that was previously DISCONNECTED is in `knockedOut`.
+    // FAST REBOOT (dep_reboot) bumps the redeploy start from 25% → 30%.
+    const isRedeploy = knockedOut.has(minion.uid);
     // Initialise the entity's STABILITY pool with role-scaled HP so a
     // TANK actually feels like a tank and an ARTILLERY genuinely is glass.
-    // Also fold in the IV/rarity/DATA-level bonuses so a high-roll
-    // ASCENDED entity actually outperforms a fresh capture of the same species.
     const kit = getSpeciesKit(minion.speciesId);
     const rarity = minion.rarity ?? 'common';
     const baseLevel = minion.baseLevel ?? minion.level;
@@ -555,13 +585,13 @@ export default function CombatScreen() {
     const effAtk = effectiveStat(minion.atk, minion.ivs?.atk ?? 0, dataLvl, baseLevel, rarity);
     const effDef = effectiveStat(minion.def, minion.ivs?.def ?? 0, dataLvl, baseLevel, rarity);
     const effSpd = effectiveStat(minion.spd, minion.ivs?.spd ?? 0, dataLvl, baseLevel, rarity);
-    // Patch the deployed minion in-memory with the effective stats so all
-    // downstream readers (playerAttack, playerMinionSkill, faction math)
-    // pull from the boosted numbers automatically.
     const boostedMinion = { ...minion, hp: effHp, maxHp: effHp, atk: effAtk, def: effDef, spd: effSpd };
-    const scaledHp = Math.max(1, Math.round(effHp * ROLES[kit.role].mods.hp));
+    const fullPool = Math.max(1, Math.round(effHp * ROLES[kit.role].mods.hp));
+    const scaledHp = isRedeploy
+      ? Math.max(1, Math.round(fullPool * synergy.redeployStabPct))
+      : fullPool;
     setMinionHp(scaledHp);
-    setMinionMaxHp(scaledHp);
+    setMinionMaxHp(fullPool);
     setFallbackPrompt(false);
     setDeployedMinion(boostedMinion);
     // ── Reset per-deploy trait counters ──
@@ -571,10 +601,21 @@ export default function CombatScreen() {
     setTurnsDeployed(0);
     setFactionAtkStack(0);
     setPhaseDodgeArmed(false);
-    // ── OPERATOR SYNERGY: PRIORITY (slot bonus next turn) ──────────
-    // No state needed yet — combat's existing fast-priority is implicit.
-    // The PRIORITY node simply guarantees the entity acts first which the
-    // current engine already does by re-routing attacks through the entity.
+    // Drop this minion from knockedOut so subsequent redeploys are tracked fresh.
+    if (isRedeploy) {
+      setKnockedOut((s) => {
+        const next = new Set(s);
+        next.delete(minion.uid);
+        return next;
+      });
+      pushLog(`◇ FAST REBOOT — ${minion.name} returns at ${Math.round(synergy.redeployStabPct * 100)}% stab.`);
+    }
+    // ── OPERATOR SYNERGY: MIRROR-PING — priority next turn ─────────
+    // Grants a free player turn after deploy (enemy turn skipped once).
+    if (synergy.priorityNextTurn) {
+      setPriorityFreeTurn(true);
+      pushLog('▸ MIRROR-PING echoes — enemy stalls.');
+    }
     pushLog(`Deployed ${minion.name} [${ROLES[kit.role].label}] — choose a PROTOCOL.`);
     sfx.confirm();
     setPanel('minionSkills');
@@ -759,6 +800,27 @@ export default function CombatScreen() {
       }
     }
     setTimeout(() => {
+      // ── OPERATOR SYNERGY: THREAD SPLIT / EXECUTE CHAIN ──────────
+      // X% chance to NOT end the player's turn — entity acts twice.
+      // Skipped if combat is already ending or enemy is dead.
+      if (
+        deployedMinion && enemyHp > 0 && synergy.chainActionChance > 0 &&
+        Math.random() < synergy.chainActionChance
+      ) {
+        pushLog('▸ THREAD SPLIT — entity chains a second action.');
+        setBusy(false);
+        return;
+      }
+      // ── OPERATOR SYNERGY: CORE LEAK self-drain ──────────────────
+      // OVERCLOCK II charges a hidden 5%/turn stab tax. Only ticks
+      // while an entity is actively deployed and survives the turn.
+      if (deployedMinion && minionHp > 0 && synergy.entityStabSelfDrain > 0) {
+        // BIO-LATCH (entityStabDecayMod = -0.25) slows the drain by 25%.
+        const decay = Math.max(0, 1 + (synergy.entityStabDecayMod ?? 0));
+        const drain = Math.max(1, Math.round(minionMaxHp * synergy.entityStabSelfDrain * decay));
+        setMinionHp((h) => Math.max(1, h - drain));
+        showFloater(`-${drain}`, '#ff8c00', 'p');
+      }
       if (enemyHp <= 0) { onVictory(); return; }
       // If haste, player goes again
       if (haste) {
@@ -773,6 +835,18 @@ export default function CombatScreen() {
   };
 
   const enemyTurn = () => {
+    // ── OPERATOR SYNERGY: MIRROR-PING (priority free turn) ────────
+    // After a deploy with the PRIORITY node active, the first enemy
+    // turn is short-circuited — the operator gets a free action.
+    if (priorityFreeTurn) {
+      setPriorityFreeTurn(false);
+      pushLog('▸ MIRROR-PING locked enemy out — free action.');
+      setTimeout(() => {
+        setBusy(false);
+        setTurn('player');
+      }, 320);
+      return;
+    }
     // Quantum Taming: DDOS Overload may have stunned the enemy. Skip their turn.
     if (enemyStun > 0) {
       pushLog(`${enemyData.name} is stunned and skips a turn!`);

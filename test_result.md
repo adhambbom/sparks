@@ -443,7 +443,34 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      TONE LOCK + FACTION CORRUPTION BEHAVIORS shipped.
+      CRASH FIX + FULL SYNERGY WIRING.
+
+      Crash fix:
+        • `setTurnsDeployed`, `setFactionAtkStack`, `setPhaseDodgeArmed`
+          useState hooks were missing — re-added at the top of the
+          combat component. Deploy flow no longer throws.
+
+      Synergy wiring completion (every operator node now visibly
+      affects deployed entities):
+        • HANDSHAKE / NULL CALL — deploy now costs PWR; cost drops
+          from 6 → 4 → 2 with the deployment branch.
+        • FAST REBOOT — when a redeploy occurs (entity previously
+          DISCONNECTED) the new stab pool starts at synergy.redeployStabPct
+          (25% default, 30% with FAST REBOOT).
+        • MIRROR-PING — sets priorityFreeTurn on deploy; first enemy
+          turn is skipped with a log line.
+        • THREAD SPLIT / EXECUTE CHAIN — chainActionChance gate at
+          endPlayerTurn skips the turn-flip so the entity acts twice.
+        • CORE LEAK — entityStabSelfDrain ticks per-turn stability
+          tax on the deployed entity (5%/turn for OVERCLOCK II).
+        • BIO-LATCH — entityStabDecayMod reduces CORE LEAK drain by 25%.
+        • All existing wired nodes preserved (OVERCLOCK ATK, BUFFER
+          dmg reduction, PROXY ABSORB, SIGNAL BLEED crit, SIGNATURE+,
+          STACK INJECT / BIO-LEECH / GLITCH FIELD / FULL PURGE,
+          HOT-PATCH, GHOST GRID passive stab restore).
+
+      Audit summary: 20/20 synergy nodes now have an observable in-combat
+      effect. Bundle compiles clean. No API surface change.
 
       Terminology overhaul (away from Pokémon/fantasy language):
         • IV quality tags rewritten as forensic / illegal-AI terms:
