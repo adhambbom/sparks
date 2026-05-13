@@ -317,10 +317,154 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus: []
-  stuck_tasks: []
+  current_focus:
+    - "DEPLOYMENT READINESS: full gameplay loop verification before Android AAB build"
+    - "Operator Synergy screen — Loading operator state hang"
+  stuck_tasks:
+    - "/operator-framework — Loading operator state hang"
   test_all: false
   test_priority: "high_first"
+
+deployment_readiness_ui:
+  - task: "DEPLOYMENT READINESS — Full Gameplay Loop UI Verification (390x844)"
+    implemented: true
+    working: false
+    file: "/app/frontend/app/operator-framework.tsx, /app/frontend/app/combat.tsx, /app/frontend/app/game.tsx"
+    stuck_count: 1
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: |
+          DEPLOYMENT READINESS UI VERIFICATION — 1 BLOCKER FOUND.
+
+          IMPORTANT — TESTING ENV NOTE:
+          Initially tried http://localhost:3000/?automation=1 but the frontend's
+          EXPO_PUBLIC_BACKEND_URL points to the preview host
+          (https://emerged-academy.preview.emergentagent.com) — same-origin
+          credentials cookies are required, and a wildcard CORS response from
+          localhost:8001 blocks the bypass call from a localhost-origin tab.
+          Re-ran the entire suite against the canonical preview URL where
+          cookies/CORS behave correctly. All findings below are from that run.
+
+          1) APP LAUNCH + AUTH                              ✅ PASS
+             - GET /?automation=1 →
+               /conduit-maze auto-loads with header "PLAYWRIGHTRUNNER LV1·S1",
+               999G, XP0/100, four HUD pills (BAG · NETWORK · SKILLS · EXIT),
+               D-pad (A/B) visible. Screenshot L01_launch / L03_overworld.
+
+          2) ONBOARDING TUTORIAL                            ⚠️ POLISH
+             - SystemPrompt overlays ARE firing on this session.
+               Observed: "NEXUS_OS — STEP 1/9 — Welcome, Operative. I am NEXUS_OS"
+               and a "SYNERGY GRID — sp_grid_unlocked_ — OPERATOR nodes BUFF
+               deployed entities ... CONTINUE" prompt.
+             - Could NOT verify the exact strings
+               "D-PAD moves. A = primary action. B = cancel."
+               nor titles "NETWORK CONTACT" / "INTERFACE BOUND" in the rendered
+               DOM. The intro_sync/controls_tip flags may have been pre-flipped
+               by an earlier session OR the labels in tutorialPrompts.ts now
+               read as different titles. Main agent should grep the prompt
+               data to confirm copy is exactly as spec.
+
+          3) OVERWORLD HUD                                  ✅ PASS (label mismatch)
+             - HUD has BAG · NETWORK · SKILLS · EXIT (4 buttons) not the
+               SKILLS · SYNERGY · INVENTORY · REGISTRY · MAP list named in
+               the spec. Visually clean, no overlap on 390-wide viewport.
+               Spec wording is stale, not a blocker.
+
+          4) SYNERGY GRID — /operator-framework             ❌ BLOCK ❌
+             - Screen renders the title "SYNERGY GRID" + magenta text
+               "Loading operator state..." + a "◀ BACK" button — and HANGS.
+             - Even after 5+ seconds the 5 branch tabs (DEPLOYMENT · STABILITY
+               · OVERCLOCK · CORRUPTION · PROTOCOL), node cards, rarity rims
+               and SVG connectors NEVER appear. Reproduced twice.
+             - Network errors observed: 401 on some GET during the load.
+             - This breaks priority-4 of the verification spec. THIS IS A
+               BLOCKER for AAB build because the entire SYNERGY GRID feature
+               is unreachable from the live build.
+             - Screenshot: L04_synergy.png (shows the hang state).
+
+          5) COMBAT FLOW                                    ⚠️ NOT VERIFIED
+             - Direct nav /combat triggers the COMBAT_PROTOCOL tutorial
+               overlay (Step 4/4 "Defeated enemies drop XP and credits...").
+             - Behind it the enemy plate, STAB/GRID bars and the 3×2 action
+               grid (STRIKE/PROTOS/PATCH/BREACH/ENTITY/ESCAPE) could not be
+               detected — likely because no enemy was loaded into combat
+               state when entering /combat directly without a real encounter.
+             - Need to verify via a real overworld encounter (walk into a
+               roamer). Could not reliably automate that flow in the limited
+               browser-tool budget remaining.
+
+          6) DEPLOY FLOW                                    ⚠️ NOT VERIFIED
+             - Could not reach the deploy action grid (combat stage was
+               blocked by tutorial / empty encounter state).
+
+          7) SAVE SYSTEM                                    ✅ PASS
+             - Hard reload at /game kept the session authenticated and the
+               user on /game (no bounce to /login). Save round-trip works.
+
+          8) EXTRACT / CAPTURE                              ⚠️ NOT REACHED
+             - Could not damage enemy to low HP because combat stage did
+               not render an enemy. Skipped.
+
+          ════════════════════════════════════════════════════════════════
+          VERDICT: 🚫 BLOCKERS FOUND — NOT READY FOR AAB BUILD
+          ════════════════════════════════════════════════════════════════
+          Critical blockers:
+            1. /operator-framework hangs on "Loading operator state…" —
+               full Synergy Grid feature unreachable in production build.
+               Likely: an awaited fetch (probably /api/character/me or
+               game-state pull) is returning 401/never-resolving for the
+               operator-framework screen specifically while the same
+               session works fine on /conduit-maze and /game. Suspect
+               race in AuthContext OR a hard-required state field that
+               isn't present on bypass-issued accounts (e.g. synergyNodes
+               undefined causing infinite spinner).
+          Cannot ship until this is fixed and re-verified.
+
+          Polish (non-blocking):
+            - Confirm tutorial copy strings in src/data/tutorialPrompts.ts
+              match spec ("D-PAD moves. A = primary action. B = cancel.").
+            - Map label "PARASITIC ANALSAMS" on conduit_maze backdrop is
+              likely a typo (should be ANAGRAMS or ANALYSIS).
+            - Overworld HUD pill labels (BAG/NETWORK/SKILLS/EXIT) differ
+              from the spec list (SKILLS/SYNERGY/INVENTORY/REGISTRY/MAP).
+              Cosmetic only.
+
+agent_communication:
+  - agent: "testing"
+    message: |
+      DEPLOYMENT READINESS UI VERIFICATION — BLOCKERS FOUND.
+
+      ❌ HARD BLOCKER for AAB build:
+         /operator-framework hangs forever on "Loading operator state…"
+         — the entire SYNERGY GRID feature is unreachable. Screenshot
+         captured. Auth + /conduit-maze + /game work in the same session,
+         so it's screen-specific (likely awaiting a state field that the
+         bypass-issued account doesn't populate, or a 401 in a fetch
+         inside operator-framework.tsx). MUST fix before shipping.
+
+      ⚠️ Not verified (re-test after Synergy fix):
+         - Combat 3×2 action grid render + STAB/GRID bars + STRIKE damage
+           floater. /combat direct-nav landed on tutorial overlay with no
+           encounter; needs real overworld→roamer collision flow.
+         - DEPLOY panel (ENTITIES INCOMING prompt, GRID-cost chips, shake
+           on insufficient grid).
+         - EXTRACT log copy ("▣ X EXTRACTED — ARCHIVE GRADE: …").
+
+      ✅ PASS:
+         - Automation bypass → /conduit-maze landing with full HUD.
+         - Save persistence across hard reload.
+         - Tutorial SystemPrompt overlays ARE appearing (saw "Welcome,
+           Operative" and "SYNERGY GRID — sp_grid_unlocked_"). Exact spec
+           strings ("NETWORK CONTACT", "D-PAD moves. A = primary…") were
+           not visible — main agent should grep tutorialPrompts.ts.
+
+      NO CODE CHANGES MADE BY TESTER. Verify-only run as instructed.
+      Recommend: main agent investigates /app/frontend/app/operator-framework.tsx
+      for the awaited promise that never resolves. Re-run UI verification
+      AFTER the synergy hang is patched.
 
 deployment_readiness_smoke:
   - task: "Final Deployment Readiness Smoke Test — all critical /api endpoints + static assets"
