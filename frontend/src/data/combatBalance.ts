@@ -113,11 +113,12 @@ export function getTypeMultiplier(atk: FactionId, def: FactionId): number {
 // so no single minion is good at everything.
 // ──────────────────────────────────────────────────────────
 export type MinionRole =
-  | 'tank'         // soaks hits for the player
-  | 'striker'      // burst single-target damage
-  | 'disruptor'    // status-effect specialist
-  | 'support'      // heals / shields / buffs
-  | 'artillery';   // long-range high-power, fragile
+  | 'tank'         // TANK — soaks hits for the player
+  | 'striker'      // ASSAULT — burst single-target damage
+  | 'disruptor'    // HACKER — status-effect specialist
+  | 'support'      // SUPPORT — heals / shields / buffs
+  | 'artillery'    // CORRUPTION — DoT specialist, fragile
+  | 'swarm';       // SWARM — fast weak attackers, stacking bleed
 
 export type RoleDef = {
   id: MinionRole;
@@ -142,19 +143,19 @@ export const ROLES: Record<MinionRole, RoleDef> = {
   },
   striker: {
     id: 'striker',
-    label: 'STRIKER',
+    label: 'ASSAULT',
     mods: { hp: 0.95, atk: 1.35, def: 0.95, spd: 1.10 },
     statusBonus: 0.0,
     critBonus: 0.15,
-    blurb: 'High single-target burst & crit.',
+    blurb: 'High single-target burst & system breach chance.',
   },
   disruptor: {
     id: 'disruptor',
-    label: 'DISRUPTOR',
+    label: 'HACKER',
     mods: { hp: 0.90, atk: 1.00, def: 0.90, spd: 1.20 },
     statusBonus: 0.50,
     critBonus: 0,
-    blurb: 'Applies hacks, stuns, slows.',
+    blurb: 'Disables, stuns, drains POWER GRID.',
   },
   support: {
     id: 'support',
@@ -162,15 +163,23 @@ export const ROLES: Record<MinionRole, RoleDef> = {
     mods: { hp: 1.10, atk: 0.80, def: 1.15, spd: 1.00 },
     statusBonus: 0.0,
     critBonus: 0,
-    blurb: 'Heals & shields the team.',
+    blurb: 'Heals & shields the NETWORK.',
   },
   artillery: {
     id: 'artillery',
-    label: 'ARTILLERY',
+    label: 'CORRUPTION',
     mods: { hp: 0.80, atk: 1.55, def: 0.75, spd: 0.95 },
-    statusBonus: 0.15,
+    statusBonus: 0.35,
     critBonus: 0.08,
-    blurb: 'Glass cannon — huge damage, fragile.',
+    blurb: 'Massive DoT, fragile shell.',
+  },
+  swarm: {
+    id: 'swarm',
+    label: 'SWARM',
+    mods: { hp: 0.70, atk: 1.10, def: 0.70, spd: 1.40 },
+    statusBonus: 0.30,
+    critBonus: 0.05,
+    blurb: 'Fast weak hits, stacking bleed.',
   },
 };
 

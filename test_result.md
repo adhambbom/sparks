@@ -979,3 +979,110 @@ agent_communication:
 
       No backend changes. No new packages. Bundle compiles cleanly.
       Live preview confirmed both with and without ?debug=collision.
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  PHASE 2 — ENTITY STRATEGY COMPLETION                          ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Completed the four Phase-2 deliverables from the QUANTUM REGISTRY
+      plan: AI-themed terminology, class system rename, death/fallback
+      flow, and stronger vulnerability indicators.
+
+      1) TERMINOLOGY RENAME (visible-string sweep in combat.tsx)
+         ATTACK     → EXECUTE
+         SKILL      → PROTOCOLS
+         ITEM       → UTILITY
+         TAME       → JAILBREAK
+         CALL       → DEPLOY
+         MINION     → ENTITY
+         RUN        → DISCONNECT
+         HP         → STABILITY
+         MP         → POWER GRID / PWR
+         XP         → DATA
+         CRIT       → SYSTEM BREACH
+         SUPER EFFECTIVE → VULNERABILITY EXPLOITED
+         STRONG          → VULNERABLE
+         PARTY      → NETWORK
+         Internal variable names kept for stability.
+
+      2) CLASS SYSTEM RENAME (combatBalance.ts ROLES)
+         Old "striker"   → label "ASSAULT"  (high burst damage)
+         Old "tank"      → label "TANK"     (unchanged)
+         Old "disruptor" → label "HACKER"   (status-effect specialist)
+         Old "support"   → label "SUPPORT"  (unchanged)
+         Old "artillery" → label "CORRUPTION" (DoT, fragile)
+         NEW class added: "swarm" → label "SWARM"
+            (fast weak hits, stacking bleed, 70% HP / 110% ATK)
+         Class blurbs rewritten in AI-warfare voice ("Drains POWER GRID",
+         "Heals & shields the NETWORK", "Massive DoT, fragile shell").
+
+      3) DEATH / FALLBACK FLOW
+         New transient combat state:
+           • minionHp / minionMaxHp — per-deployed-entity STABILITY pool
+             initialised on deploy with role-scaled HP (TANK = 1.55×,
+             ARTILLERY = 0.8× etc.)
+           • knockedOut: Set<uid> — entities disconnected this fight,
+             can't be re-deployed.
+           • fallbackPrompt — flips on when an active entity is KO'd.
+         Enemy-turn damage pipeline rewired:
+           if (deployedMinion && minionHp > 0):
+             entity STABILITY is depleted first (magenta floater)
+             player STABILITY untouched
+             if entity → 0:
+               * push "⚠ NAME DISCONNECTED!" log line
+               * add uid to knockedOut
+               * setDeployedMinion(null)
+               * if alive entities remain → open DEPLOY panel
+                 (fallbackPrompt) so the player picks the next one
+               * else → log "Network depleted — fighting solo"
+           else:
+             player takes the full hit (legacy behaviour)
+         The "Defeat" check now only triggers when the damage that
+         REACHED the player would bring their HP to 0. An entity dying
+         never ends the fight — exactly the "player remains alive,
+         choose another OR continue fighting yourself" flow the user
+         specified.
+         The deploy panel auto-filters out KO'd entities so the player
+         can't redeploy a disconnected one this fight.
+
+      4) STRONGER VULNERABILITY INDICATORS
+         • Trigger: when computed damage tier is 'super' or 'strong',
+           setVulnPulse(Date.now()) fires.
+         • Pulse ring on enemy sprite:
+              expanding (1× → 1.45×) faction-tinted ring
+              opacity 1 → 0 over 600 ms
+              borderWidth 3, faction.glowColor
+         • Red flash:
+              translucent red (255,80,140,0.45) wash for the first 18 %
+              of the pulse lifetime, mix-blend-mode: screen on web for a
+              cinematic damage-pop look.
+         • Existing "VULNERABILITY EXPLOITED!" floater still fires above
+           the enemy.
+         Net effect: the player can FEEL the difference between a
+         neutral hit and a faction-matchup hit even without reading
+         the floater text.
+
+      WHAT THIS SOLVES
+        ✅ Combat UI now speaks the QUANTUM REGISTRY language end-to-end.
+        ✅ 6 classes locked in (ASSAULT / TANK / HACKER / SUPPORT /
+            CORRUPTION / SWARM) with mechanically distinct stat mods.
+        ✅ Entity death is no longer an instant-loss event — the player
+            is offered a tactical reshuffle.
+        ✅ Vulnerability hits land with VISUAL POP, not just text.
+        ✅ Entities now feel like tactical shields, not weak clones.
+
+      STILL ON THE PHASE-2 / NEXT BACKLOG
+        - Status-effect application + per-turn ticks (the data model
+          exists in combatBalance.STATUSES; needs the combat loop to
+          maintain an active-statuses array per combatant).
+        - Cooldown UI for SIGNATURE abilities.
+        - On-screen STABILITY mini-bar for the deployed entity (right
+          now the entity's pool is invisible until a hit drops a
+          floater above the player).
+        - REBOOT (revive) utility item — restore a disconnected entity
+          mid-fight at a cost.
+        - Conduit-maze tile-rule parity (still deferred).
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+

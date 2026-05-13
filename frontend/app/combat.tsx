@@ -122,6 +122,28 @@ export default function CombatScreen() {
   const [floaters, setFloaters] = useState<{ id: number; text: string; color: string; side: 'p' | 'e' }[]>([]);
   const flId = useRef(0);
   const [animTick, setAnimTick] = useState(0);
+  // Pulse trigger for VULNERABILITY EXPLOITED — a timestamp value that
+  // the ring overlay reads + animates from. We compare it against a
+  // ref of "last pulse value drawn" so each new pulse re-triggers.
+  const [vulnPulse, setVulnPulse] = useState(0);
+
+  // ── DEPLOYED ENTITY STABILITY (transient combat-only HP pool) ───────
+  // When an entity is deployed, it gets its OWN stability bar. Enemy
+  // attacks deplete the ENTITY's stability first; once it reaches 0
+  // the entity disconnects and the player is prompted to deploy
+  // another entity OR fight solo. The player only loses when their
+  // own STABILITY hits 0 — never because an entity disconnected.
+  //
+  // This is the "Death / Fallback Flow" Phase-2 deliverable: makes
+  // entities feel like tactical shields, not weak clones.
+  const [minionHp, setMinionHp] = useState(0);
+  const [minionMaxHp, setMinionMaxHp] = useState(0);
+  // When an entity gets KO'd we briefly show a fallback panel so the
+  // player can pick the next entity OR continue solo.
+  const [fallbackPrompt, setFallbackPrompt] = useState(false);
+  // Track entities that were deployed AND knocked out this fight so
+  // they can't be re-deployed in the same encounter.
+  const [knockedOut, setKnockedOut] = useState<Set<string>>(new Set());
   // 10 fps tick drives the enemy breathing animation
   useEffect(() => {
     const id = setInterval(() => setAnimTick((t) => (t + 1) % 1024), 100);
@@ -213,13 +235,17 @@ export default function CombatScreen() {
     return { dmg: Math.max(1, raw), tier, crit };
   };
 
-  /** Show a small "SUPER EFFECTIVE!" / "RESISTED" floater above the enemy. */
+  /** Show a small "VULNERABILITY EXPLOITED" / "RESISTED" floater above the enemy. */
   const showEffectiveness = (tier: ReturnType<typeof classifyEffectiveness>, crit: boolean) => {
-    if (crit) showFloater('CRIT!', '#fff066', 'e');
-    if (tier === 'super')    showFloater('SUPER EFFECTIVE!', '#ff60ff', 'e');
-    else if (tier === 'strong')  showFloater('STRONG!',           '#a0ff60', 'e');
-    else if (tier === 'resisted') showFloater('Resisted...',      '#80a0c0', 'e');
-    else if (tier === 'immune') showFloater('NO EFFECT',           '#666',    'e');
+    if (crit) showFloater('SYSTEM BREACH!', '#fff066', 'e');
+    if (tier === 'super')    showFloater('VULNERABILITY EXPLOITED!', '#ff60ff', 'e');
+    else if (tier === 'strong')  showFloater('VULNERABLE',              '#a0ff60', 'e');
+    else if (tier === 'resisted') showFloater('Resisted...',             '#80a0c0', 'e');
+    else if (tier === 'immune') showFloater('NO EFFECT',                 '#666',    'e');
+    // Strong indicator: trigger the enemy vulnerability ring pulse.
+    if (tier === 'super' || tier === 'strong') {
+      setVulnPulse(Date.now());
+    }
   };
 
   // ----- player actions -----
@@ -251,7 +277,7 @@ export default function CombatScreen() {
     const ab = ABILITIES[id];
     if (!ab) return;
     if (player.mp < ab.cost) {
-      pushLog('Not enough MP!');
+      pushLog('POWER GRID depleted!');
       return;
     }
     setBusy(true);
@@ -273,7 +299,7 @@ export default function CombatScreen() {
       sfx.heal();
       applyHeal(ab.power);
       showFloater(`+${ab.power}`, COLORS.neonGreen, 'p');
-      pushLog(`${ab.name}! Restored ${ab.power} HP.`);
+      pushLog(`${ab.name}! Restored ${ab.power} STABILITY.`);
     } else if (ab.type === 'buff') {
       sfx.skill();
       if (ab.effect === 'shield') { setShield(true); pushLog('Data Shield up! 50% reduction.'); }
@@ -413,13 +439,25 @@ export default function CombatScreen() {
   // Does NOT end the player's turn \u2014 the player still has to pick a skill.
   const playerDeployMinion = (minion: CapturedMinion) => {
     if (busy) return;
-    if (deployedMinion) {
-      pushLog('A minion is already deployed!');
+    if (knockedOut.has(minion.uid)) {
+      pushLog(`${minion.name} is DISCONNECTED — can't redeploy this fight.`);
       sfx.cancel();
       return;
     }
+    if (deployedMinion) {
+      pushLog('An entity is already deployed!');
+      sfx.cancel();
+      return;
+    }
+    // Initialise the entity's STABILITY pool with role-scaled HP so a
+    // TANK actually feels like a tank and an ARTILLERY genuinely is glass.
+    const kit = getSpeciesKit(minion.speciesId);
+    const scaledHp = Math.max(1, Math.round((minion.hp || 40) * ROLES[kit.role].mods.hp));
+    setMinionHp(scaledHp);
+    setMinionMaxHp(scaledHp);
+    setFallbackPrompt(false);
     setDeployedMinion(minion);
-    pushLog(`Deployed ${minion.name}! Choose a skill.`);
+    pushLog(`Deployed ${minion.name} [${ROLES[kit.role].label}] — choose a PROTOCOL.`);
     sfx.confirm();
     setPanel('minionSkills');
   };
@@ -524,27 +562,54 @@ export default function CombatScreen() {
         const r = computeDamage(ab.power, ab.element, enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0), enemyFaction, 0);
         dmg = r.dmg;
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); pushLog('Shield absorbs!'); }
-        applyDamage(dmg);
         sfx.damage();
-        showFloater(`-${dmg}`, COLORS.neonRed, 'p');
-        shakeAnim(playerShake);
         pushLog(`${enemyData.name} ${ab.name}! ${dmg} dmg.`);
       } else {
         const r = computeDamage(1.0, 'physical', enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0), enemyFaction, 0);
         dmg = r.dmg;
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); }
-        applyDamage(dmg);
         sfx.damage();
+        pushLog(`${enemyData.name} attacks for ${dmg}!`);
+      }
+      // ── ENTITY DAMAGE INTERCEPT ──────────────────────────────────────
+      // If an entity is deployed and still has STABILITY, IT takes the hit
+      // instead of the player — the entity is the player's shield wall.
+      // When the entity's stability reaches 0 it DISCONNECTS and the
+      // player is prompted to deploy another or continue solo.
+      let dmgToPlayer = dmg;
+      if (deployedMinion && minionHp > 0) {
+        const newMinHp = Math.max(0, minionHp - dmg);
+        setMinionHp(newMinHp);
+        showFloater(`-${dmg}`, COLORS.neonMagenta, 'p');
+        shakeAnim(playerShake);
+        if (newMinHp <= 0) {
+          pushLog(`⚠ ${deployedMinion.name} DISCONNECTED!`);
+          setKnockedOut((s) => new Set(s).add(deployedMinion.uid));
+          setDeployedMinion(null);
+          // Show fallback prompt next turn (unless party has no other entities).
+          const partyAlive = (state?.quantum?.party || []).filter(
+            (m) => m.uid !== deployedMinion.uid && !knockedOut.has(m.uid),
+          );
+          if (partyAlive.length > 0) {
+            setFallbackPrompt(true);
+            setPanel('minionDeploy');
+          } else {
+            pushLog('Network depleted — fighting solo.');
+          }
+        }
+        dmgToPlayer = 0;
+      } else {
+        applyDamage(dmg);
         showFloater(`-${dmg}`, COLORS.neonRed, 'p');
         shakeAnim(playerShake);
-        pushLog(`${enemyData.name} attacks for ${dmg}!`);
       }
       // Tick quantum-taming status durations once per enemy turn.
       if (enemyDefDebuff > 0) setEnemyDefDebuff((d) => d - 1);
       if (firewallTurns > 0) setFirewallTurns((f) => f - 1);
       setTimeout(() => {
-        // Check player death
-        if (state && state.player.hp - dmg <= 0) {
+        // Check player death — only when damage reached the player (entity
+        // absorbed it otherwise) AND the player's STABILITY hits 0.
+        if (state && state.player.hp - dmgToPlayer <= 0) {
           onDefeat();
           return;
         }
@@ -558,7 +623,7 @@ export default function CombatScreen() {
   const onVictory = async () => {
     setTurn('end');
     sfx.victory();
-    pushLog(`Victory! +${enemyData.xp} XP, +${enemyData.gold}G`);
+    pushLog(`Victory! +${enemyData.xp} DATA, +${enemyData.gold}G`);
     addGold(enemyData.gold);
     const leveled = awardXp(enemyData.xp);
     if (leveled) { sfx.levelUp(); pushLog('LEVEL UP! +1 Skill Point.'); }
@@ -684,8 +749,8 @@ export default function CombatScreen() {
                 const mult = getTypeMultiplier(k.faction, enemyFaction);
                 const tier = classifyEffectiveness(mult);
                 const label =
-                  tier === 'super' ? '⚡ SUPER EFFECTIVE'
-                  : tier === 'strong' ? '↑ STRONG'
+                  tier === 'super' ? '⚡ VULNERABILITY EXPLOITED'
+                  : tier === 'strong' ? '↑ VULNERABLE'
                   : tier === 'resisted' ? '↓ RESISTED'
                   : tier === 'immune' ? '✕ NO EFFECT'
                   : '· NEUTRAL';
@@ -723,6 +788,14 @@ export default function CombatScreen() {
                 // combat scanline overlay so it reads as a zoomed-in view.
                 const visual = getEnemyVisual(enemyData.id || '', { forceBoss: bossFromRoute || !!enemyData.isBoss });
                 const boxW = isBoss ? 170 : 150;
+                // Vulnerability pulse — when a strong/super hit lands, this
+                // ring grows + fades in the enemy's faction colour. Driven
+                // by the ms-elapsed since the last vulnPulse trigger.
+                const pulseAge = vulnPulse > 0 ? (Date.now() - vulnPulse) : Infinity;
+                const pulseT = Math.max(0, Math.min(1, pulseAge / 600));   // 600ms life
+                const pulseAlive = pulseT < 1;
+                const ringScale = 1 + pulseT * 0.45;
+                const ringAlpha = pulseAlive ? (1 - pulseT) : 0;
                 return (
                   <View style={[
                     styles.enemySpriteBox,
@@ -736,6 +809,37 @@ export default function CombatScreen() {
                       tick={animTick}
                       combat
                     />
+                    {/* VULNERABILITY pulse ring — faction-tinted, expanding + fading.
+                        Sits ON TOP of the sprite so it visually 'breaks' the silhouette. */}
+                    {pulseAlive && (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          width: (boxW - 10) * ringScale,
+                          height: (boxW - 10) * ringScale,
+                          borderRadius: ((boxW - 10) * ringScale) / 2,
+                          borderWidth: 3,
+                          borderColor: visual.faction.glowColor as any,
+                          opacity: ringAlpha,
+                        }}
+                      />
+                    )}
+                    {/* Red flash overlay — a single-frame red wash on the
+                        sprite when vulnerability lands, layered above for
+                        instant feedback. */}
+                    {pulseAlive && pulseT < 0.18 && (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: 'absolute',
+                          width: boxW - 14,
+                          height: boxW - 14,
+                          backgroundColor: 'rgba(255,80,140,0.45)',
+                          mixBlendMode: 'screen' as any,
+                        }}
+                      />
+                    )}
                   </View>
                 );
               })()}
@@ -872,18 +976,18 @@ export default function CombatScreen() {
         {turn === 'player' && !busy && panel === 'main' && (
           <View style={styles.actionGrid}>
             <View style={styles.actionCell}>
-              <PixelButton title="ATTACK" onPress={playerAttack} color={COLORS.neonRed} testID="combat-attack" full />
+              <PixelButton title="EXECUTE" onPress={playerAttack} color={COLORS.neonRed} testID="combat-attack" full />
             </View>
             <View style={styles.actionCell}>
-              <PixelButton title="SKILL" onPress={() => setPanel('skills')} color={COLORS.neonCyan} testID="combat-skill" full />
+              <PixelButton title="PROTOCOLS" onPress={() => setPanel('skills')} color={COLORS.neonCyan} testID="combat-skill" full />
             </View>
             <View style={styles.actionCell}>
-              <PixelButton title="ITEM" onPress={() => setPanel('items')} color={COLORS.neonGreen} testID="combat-item" full />
+              <PixelButton title="UTILITY" onPress={() => setPanel('items')} color={COLORS.neonGreen} testID="combat-item" full />
             </View>
-            {/* ── Quantum Taming buttons ────────────────────────────────── */}
+            {/* ── JAILBREAK (capture) ────────────────────────────────── */}
             <View style={styles.actionCell}>
               <PixelButton
-                title="TAME"
+                title="JAILBREAK"
                 onPress={() => setPanel('spikes')}
                 color={COLORS.neonMagenta}
                 testID="combat-tame"
@@ -892,7 +996,7 @@ export default function CombatScreen() {
             </View>
             <View style={styles.actionCell}>
               <PixelButton
-                title={deployedMinion ? 'MINION' : 'CALL'}
+                title={deployedMinion ? 'ENTITY' : 'DEPLOY'}
                 onPress={() => setPanel(deployedMinion ? 'minionSkills' : 'minionDeploy')}
                 color={COLORS.neonYellow}
                 testID="combat-call"
@@ -900,7 +1004,7 @@ export default function CombatScreen() {
               />
             </View>
             <View style={styles.actionCell}>
-              <PixelButton title="RUN" onPress={playerRun} color={COLORS.textDim} testID="combat-run" full />
+              <PixelButton title="DISCONNECT" onPress={playerRun} color={COLORS.textDim} testID="combat-run" full />
             </View>
           </View>
         )}
@@ -935,7 +1039,9 @@ export default function CombatScreen() {
         {/* ── DEPLOY MINION picker ────────────────────────────────────── */}
         {panel === 'minionDeploy' && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
-            {(state.quantum?.party ?? []).map((m) => {
+            {(state.quantum?.party ?? [])
+              .filter((m) => !knockedOut.has(m.uid))
+              .map((m) => {
               // Use the same enemy-visual resolver so each minion's thumb
               // matches what it looks like in combat + overworld.
               const mv = getEnemyVisual(m.speciesId);
@@ -1119,7 +1225,7 @@ export default function CombatScreen() {
                   testID={`combat-skill-${id}`}
                 >
                   <PixelText size={11} color={COLORS.neonCyan} bold>{ab.name.toUpperCase()}</PixelText>
-                  <PixelText size={9} color={COLORS.textDim}>MP {ab.cost}</PixelText>
+                  <PixelText size={9} color={COLORS.textDim}>PWR {ab.cost}</PixelText>
                   <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>{ab.desc}</PixelText>
                 </TouchableOpacity>
               );
