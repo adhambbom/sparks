@@ -443,7 +443,33 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      TUTORIAL / ONBOARDING OVERHAUL shipped.
+      POWER GRID UX OVERHAUL + TUTORIAL A/B FIX.
+
+      Tutorial copy fix (src/data/tutorialPrompts.ts):
+        • controls_tip + combat_basics now correctly say
+          "D-PAD moves. A = primary action. B = cancel."
+          (Previously listed B as primary — wrong after the swap.)
+        • combat_basics says "A button confirms — fast deploys."
+
+      POWER GRID feedback (app/combat.tsx):
+        • Player info panel now exposes labeled bars:
+            STAB  ████████ 97/164
+            GRID  ████░░░░  4/72
+          GRID label + numeric pair makes capacity glanceable.
+        • Deploy cards carry a GRID COST chip up-front, e.g. "GRID 7".
+          Chip turns RED if the operator can't afford it — no more
+          surprise denials. Tier bumps cost (+1 per tier above 1).
+        • Deploy failure feedback rewritten:
+            - No more "Insufficient POWER GRID..." log spam.
+            - Player info panel shakes horizontally on fail.
+            - GRID bar + label flash magenta-red for ~1.6s.
+            - Tiny eerie chip appears: "⚠ GRID LINK DENIED".
+            - Single sfx.cancel() — no auditory spam.
+        • Per-tier cost scaling: T1=6, T2=7, T3=8, etc.
+          Higher-tier and boss-class entities consume more bandwidth
+          as per spec.
+
+      No backend / API / schema changes. Bundle clean (951 modules).
 
       New files:
         • src/systems/tutorialState.ts — AsyncStorage-backed flag store

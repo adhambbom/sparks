@@ -45,9 +45,9 @@ export const TUTORIAL_PROMPTS: Record<TutorialFlag, TutorialPrompt> = {
     glyph: '⌬',
     color: '#5cb3ff',
     body: [
-      'D-PAD moves. B = primary action.',
-      'A = cancel / system menu.',
-      'Hold near your right thumb.',
+      'D-PAD moves. A = primary action.',
+      'B = cancel / system menu.',
+      'A sits under your right thumb.',
     ],
   },
   combat_basics: {
@@ -58,8 +58,8 @@ export const TUTORIAL_PROMPTS: Record<TutorialFlag, TutorialPrompt> = {
     color: '#ff6b6b',
     body: [
       'Turn-based duel. Strike / Protocols /',
-      'Items / Deploy Entity / Extract / Escape.',
-      'B button confirms — fast deploys.',
+      'Items / Deploy / Extract / Escape.',
+      'A button confirms — fast deploys.',
     ],
   },
   deploy_primer: {

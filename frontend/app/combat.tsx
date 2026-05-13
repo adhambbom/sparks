@@ -190,6 +190,22 @@ export default function CombatScreen() {
   // appears once across all sessions.
   const [showRarityTip, setShowRarityTip] = useState(false);
   const [showDataLevelTip, setShowDataLevelTip] = useState(false);
+  // POWER GRID visual feedback: shake animation + transient ALERT chip
+  // shown on the player info panel when a deploy fails. Replaces the
+  // log-spam stream of "Insufficient POWER GRID for deploy (need 6)".
+  const gridShake = useRef(new Animated.Value(0)).current;
+  const [gridAlert, setGridAlert] = useState<string | null>(null);
+  const flashGridAlert = (msg: string) => {
+    setGridAlert(msg);
+    Animated.sequence([
+      Animated.timing(gridShake, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(gridShake, { toValue: -1, duration: 80, useNativeDriver: true }),
+      Animated.timing(gridShake, { toValue: 1, duration: 60, useNativeDriver: true }),
+      Animated.timing(gridShake, { toValue: 0, duration: 60, useNativeDriver: true }),
+    ]).start();
+    // Auto-clear after a short window so the chip doesn't loiter.
+    setTimeout(() => setGridAlert(null), 1600);
+  };
 
   // ── ACTIVE STATUS EFFECTS ─────────────────────────────────────────
   // Lists of currently-applied STATUSES on enemy / player. Each entry
@@ -561,14 +577,15 @@ export default function CombatScreen() {
       sfx.cancel();
       return;
     }
-    // ── OPERATOR SYNERGY: HANDSHAKE / NULL CALL — deploy PWR cost ──
-    // Base deploy cost is 6 POWER GRID. Cheaper with HANDSHAKE (−2) and
-    // NULL CALL (additional −2 → total −4). Floor at 0. If the operator
-    // doesn't have enough PWR the deploy fails (audible cancel).
-    const baseDeployCost = 6;
+    // ── OPERATOR SYNERGY: HANDSHAKE / NULL CALL — deploy GRID cost ──
+    // Base cost is 6 GRID. Higher-tier entities consume more bandwidth
+    // (+1 per tier above 1). Synergy reduces via HANDSHAKE (−2) and
+    // NULL CALL (−4 total). Floor at 0.
+    const baseDeployCost = 6 + Math.max(0, (minion.tier || 1) - 1);
     const deployCost = Math.max(0, baseDeployCost + synergy.deployPwrCostMod);
     if (state && state.player.mp < deployCost) {
-      pushLog(`Insufficient POWER GRID for deploy (need ${deployCost}).`);
+      // ── DEPLOY DENIED — short eerie feedback, no log spam ──────────
+      flashGridAlert('GRID LINK DENIED');
       sfx.cancel();
       return;
     }
@@ -1411,14 +1428,38 @@ export default function CombatScreen() {
             </View>
           </View>
         ) : (
-          <View style={styles.playerInfoPanel}>
+          <Animated.View
+            style={[
+              styles.playerInfoPanel,
+              {
+                transform: [{ translateX: gridShake.interpolate({ inputRange: [-1, 1], outputRange: [-6, 6] }) }],
+                borderColor: gridAlert ? '#ff4789' : '#4CAF50',
+              },
+            ]}
+          >
             <View style={styles.statRow}>
               <View style={{ flex: 1 }}>
                 <PixelText size={11} color={COLORS.neonGreen} bold autoFit>{player.name.toUpperCase()} · LV {player.level}</PixelText>
                 <View style={{ height: 4 }} />
-                <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={150} height={9} />
+                {/* STAB bar */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <PixelText size={7} color={COLORS.textDim}>STAB</PixelText>
+                  <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={140} height={9} />
+                  <PixelText size={7} color={COLORS.text}>{player.hp}/{player.maxHp}</PixelText>
+                </View>
                 <View style={{ height: 4 }} />
-                <StatBar value={player.mp} max={player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={150} height={9} />
+                {/* POWER GRID bar — labeled + numeric so the player can
+                    instantly see if they can afford a deploy. */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <PixelText size={7} color={gridAlert ? '#ff4789' : '#5cb3ff'} bold>GRID</PixelText>
+                  <StatBar value={player.mp} max={player.maxMp} color={gridAlert ? '#ff4789' : COLORS.mp} bgColor={COLORS.mpBg} width={140} height={9} />
+                  <PixelText size={7} color={gridAlert ? '#ff4789' : COLORS.text}>{player.mp}/{player.maxMp}</PixelText>
+                </View>
+                {gridAlert && (
+                  <View style={{ marginTop: 4, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#ff4789', backgroundColor: 'rgba(80,10,30,0.55)', paddingHorizontal: 5, paddingVertical: 2 }}>
+                    <PixelText size={8} color={'#ff4789'} bold>⚠ {gridAlert}</PixelText>
+                  </View>
+                )}
               </View>
               <View style={styles.statusIcons}>
                 {shield && <PixelText size={10} color={COLORS.neonCyan} bold>◇SHIELD</PixelText>}
@@ -1426,7 +1467,7 @@ export default function CombatScreen() {
                 {enemyBurn > 0 && <PixelText size={10} color="#ff8000" bold>🔥{enemyBurn}</PixelText>}
               </View>
             </View>
-          </View>
+          </Animated.View>
         )}
 
         {turn === 'player' && !busy && panel === 'main' && (
@@ -1582,6 +1623,31 @@ export default function CombatScreen() {
                   <PixelText size={8} color={COLORS.textDim} autoFit>
                     Lv{m.level} · T{m.tier} · DLV{m.dataLevel ?? m.level}
                   </PixelText>
+                  {/* ── GRID COST CHIP — visible cost up-front so the
+                      operator never gets surprised by GRID LINK DENIED.
+                      Tier scales the cost: T1=base(6), T2=+1, T3=+2.
+                      Synergy reduces via HANDSHAKE / NULL CALL. */}
+                  {(() => {
+                    const tierBump = Math.max(0, (m.tier || 1) - 1);
+                    const cost = Math.max(0, 6 + tierBump + synergy.deployPwrCostMod);
+                    const canAfford = (state?.player.mp ?? 0) >= cost;
+                    return (
+                      <View style={{ marginTop: 2 }}>
+                        <View style={{
+                          alignSelf: 'flex-start',
+                          borderWidth: 1,
+                          borderColor: canAfford ? '#5cb3ff' : '#ff4789',
+                          paddingHorizontal: 4,
+                          paddingVertical: 1,
+                          backgroundColor: canAfford ? 'rgba(20,40,70,0.55)' : 'rgba(70,15,30,0.55)',
+                        }}>
+                          <PixelText size={7} color={canAfford ? '#5cb3ff' : '#ff4789'} bold>
+                            GRID {cost}
+                          </PixelText>
+                        </View>
+                      </View>
+                    );
+                  })()}
                   {/* ── RARITY + IV CHIP — drives addiction loop ── */}
                   {(() => {
                     const r = m.rarity ?? 'common';
