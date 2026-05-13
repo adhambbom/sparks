@@ -322,6 +322,67 @@ test_plan:
   test_all: false
   test_priority: "high_first"
 
+deployment_readiness_smoke:
+  - task: "Final Deployment Readiness Smoke Test — all critical /api endpoints + static assets"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py, /app/backend_test.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          DEPLOYMENT READINESS SMOKE — 10/10 PASS, ZERO 500s, ALL <2s.
+
+          1) GET  /api/                                  → 200 in 314ms
+             body: {"message":"Synthetic Sparks API","version":"1.0"}
+
+          2) POST /api/auth/automation-bypass            → 200 in  72ms
+             body: id=<oid>, email=playwright@nexus.test,
+                   name=PlaywrightRunnerNode01, role=user,
+                   access_token=<213-char JWT>, redirect=/conduit-maze
+             httpOnly cookies set: access_token + refresh_token.
+
+          3) GET  /api/character/me                      → 200 in  71ms
+             has_character=true, player.name=PlaywrightRunner,
+             world.currentMap=conduit_maze. Full nested state returned.
+
+          4) POST /api/game/save                         → 200 in  76ms
+             Payload included a fresh marker on state.player and a
+             mutated world.position. Response echoed `ok=true` and
+             returned the full state with the marker intact.
+
+          5) GET  /api/character/me (round-trip)         → 200 in  69ms
+             Persisted marker matched the saved marker exactly —
+             confirming end-to-end save → read integrity.
+
+          6) Checkpoint flow:
+             POST /api/game/checkpoint (with cp marker, gold=999)
+                  → 200 in 72ms (ok=true)
+             POST /api/game/save (dirty mutation, gold=1)
+                  → 200 in 73ms
+             POST /api/game/restore-checkpoint
+                  → 200 in 71ms, restored player.__checkpoint_marker__
+                  and gold=999 exactly. Checkpoint round-trip CLEAN.
+
+          7) GET  /api/game/leaderboard                  → 200 in 160ms
+             Returned {"leaderboard": [...4 entries...]} as anonymous
+             client — public read confirmed.
+
+          8) GET  /api/static/sprites/player_adhamb.png  → 200 in 138ms
+             content-type=image/png, 162530 bytes. Static asset mount
+             via /api/static/* serving correctly.
+
+          9) ZERO 500-class responses across all 10 calls.
+
+         10) Slowest call: GET /api/ at 314ms (initial cold connection).
+             All other calls 69–160ms. Well below the 2s threshold.
+
+          VERDICT: Backend is READY FOR PRODUCTION DEPLOY.
+          No code changes made by tester.
+
 backend_smoke:
   - task: "Entity Progression fields — IVs, rarity, dataLevel/dataXp/dataXpToNext, baseLevel round-trip"
     implemented: true

@@ -1,363 +1,350 @@
-"""Backend regression test — Entity Progression fields (IVs, rarity, DATA leveling).
+"""
+Final deployment readiness smoke test for the Synthetic Sparks FastAPI backend.
 
-Verifies that the backend's /api/game/save and /api/character/me endpoints
-correctly round-trip extended CapturedMinion fields:
-  - ivs: { hp, atk, def, spd }
-  - rarity: 'common' | 'rare' | 'glitched' | 'ascended'
-  - dataLevel, dataXp, dataXpToNext, baseLevel
-
-Also exercises legacy compatibility (no new fields), checkpoint save/load,
-and the root + leaderboard endpoints.
+Tests (in order):
+  1. GET  /api/                              — server alive
+  2. POST /api/auth/automation-bypass        — auth flow works
+  3. GET  /api/character/me                  — character load works
+  4. POST /api/game/save                     — full state persistence works
+  5. GET  /api/character/me  (post-save)     — round-trip integrity
+  6. POST /api/game/checkpoint + restore     — checkpoint flow OK
+  7. GET  /api/game/leaderboard              — public read endpoint OK
+  8. GET  /api/static/sprites/player_adhamb.png — static asset serving OK
+  9. Zero 500s
+ 10. Reasonable latency (<2s each)
 """
 
-import json
+from __future__ import annotations
+
 import sys
-from typing import Any, Dict
+import time
+import json
+import traceback
+from typing import Any, Dict, List, Tuple
 
 import requests
 
+
 BACKEND_URL = "https://emerged-academy.preview.emergentagent.com"
 API = f"{BACKEND_URL}/api"
-
-session = requests.Session()
-session.headers.update({"User-Agent": "backend-tester/entity-progression"})
-
-results = []  # list of (name, ok, detail)
+TIMEOUT = 30
+SLOW_THRESHOLD = 2.0  # seconds
 
 
-def record(name: str, ok: bool, detail: str = "") -> None:
-    badge = "PASS" if ok else "FAIL"
-    print(f"[{badge}] {name}: {detail}")
-    results.append((name, ok, detail))
+def colorize(s: str, color: str) -> str:
+    codes = {"green": 32, "red": 31, "yellow": 33, "cyan": 36, "bold": 1}
+    return f"\033[{codes.get(color, 0)}m{s}\033[0m"
 
 
-def deep_get(d: Any, path: str, default=None):
-    cur: Any = d
-    for k in path.split("."):
-        if isinstance(cur, dict) and k in cur:
-            cur = cur[k]
+class Smoke:
+    def __init__(self) -> None:
+        self.session = requests.Session()
+        self.results: List[Dict[str, Any]] = []
+        self.fivexx_count = 0
+        self.slow_count = 0
+
+    def _record(self, name: str, ok: bool, status: int, elapsed: float,
+                detail: str = "") -> None:
+        self.results.append({
+            "name": name, "ok": ok, "status": status,
+            "elapsed_s": round(elapsed, 3), "detail": detail,
+        })
+        if status >= 500:
+            self.fivexx_count += 1
+        if elapsed > SLOW_THRESHOLD:
+            self.slow_count += 1
+
+        marker = colorize("PASS", "green") if ok else colorize("FAIL", "red")
+        slow_tag = colorize(" SLOW", "yellow") if elapsed > SLOW_THRESHOLD else ""
+        print(f"  [{marker}] {name:55s} HTTP {status}  "
+              f"{elapsed*1000:7.1f} ms{slow_tag}  {detail}")
+
+    def _request(self, method: str, path: str, **kw) -> Tuple[requests.Response, float]:
+        url = f"{API}{path}" if path.startswith("/") else f"{BACKEND_URL}{path}"
+        kw.setdefault("timeout", TIMEOUT)
+        start = time.perf_counter()
+        resp = self.session.request(method, url, **kw)
+        elapsed = time.perf_counter() - start
+        return resp, elapsed
+
+    def test_root(self) -> None:
+        try:
+            r, t = self._request("GET", "/")
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            ok = (r.status_code == 200
+                  and body.get("message") == "Synthetic Sparks API")
+            detail = f"message={body.get('message')!r} version={body.get('version')!r}"
+            self._record("GET /api/", ok, r.status_code, t, detail)
+        except Exception as e:
+            self._record("GET /api/", False, 0, 0.0, f"exception: {e}")
+
+    def test_automation_bypass(self) -> Dict[str, Any]:
+        try:
+            r, t = self._request("POST", "/auth/automation-bypass")
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            has_token = bool(body.get("access_token"))
+            has_id = bool(body.get("id"))
+            has_cookies = bool(self.session.cookies.get("access_token"))
+            ok = (r.status_code == 200 and has_token and has_id and has_cookies)
+            detail = (f"email={body.get('email')} id_present={has_id} "
+                      f"jwt_len={len(body.get('access_token') or '')} "
+                      f"httpOnly_cookie={has_cookies} "
+                      f"redirect={body.get('redirect')!r}")
+            self._record("POST /api/auth/automation-bypass", ok,
+                         r.status_code, t, detail)
+            return body if ok else {}
+        except Exception as e:
+            self._record("POST /api/auth/automation-bypass", False, 0, 0.0,
+                         f"exception: {e}")
+            return {}
+
+    def test_character_me(self, label: str = "GET /api/character/me") -> Dict[str, Any]:
+        try:
+            r, t = self._request("GET", "/character/me")
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            ok = (r.status_code == 200 and body.get("has_character") is True
+                  and isinstance(body.get("state"), dict))
+            state = body.get("state") or {}
+            player = (state.get("player") or {}) if isinstance(state, dict) else {}
+            world = (state.get("world") or {}) if isinstance(state, dict) else {}
+            detail = (f"has_character={body.get('has_character')} "
+                      f"player_name={player.get('name')!r} "
+                      f"map={world.get('currentMap')!r}")
+            self._record(label, ok, r.status_code, t, detail)
+            return body if ok else {}
+        except Exception as e:
+            self._record(label, False, 0, 0.0, f"exception: {e}")
+            return {}
+
+    def test_save(self, base_state: Dict[str, Any]) -> Dict[str, Any]:
+        state = json.loads(json.dumps(base_state))
+        marker = f"smoke-{int(time.time())}"
+        state.setdefault("player", {})
+        state["player"]["__smoke_marker__"] = marker
+        state["player"]["gold"] = int(state["player"].get("gold", 50)) + 7
+        state.setdefault("world", {})
+        state["world"]["position"] = {"x": 4, "y": 5}
+
+        try:
+            r, t = self._request("POST", "/game/save", json={"state": state})
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            ok = (r.status_code == 200 and body.get("ok") is True
+                  and isinstance(body.get("state"), dict)
+                  and body["state"].get("player", {}).get("__smoke_marker__") == marker)
+            detail = (f"ok={body.get('ok')} "
+                      f"marker_echoed="
+                      f"{body.get('state', {}).get('player', {}).get('__smoke_marker__') == marker}")
+            self._record("POST /api/game/save", ok, r.status_code, t, detail)
+            return {"marker": marker, "state": state} if ok else {}
+        except Exception as e:
+            self._record("POST /api/game/save", False, 0, 0.0, f"exception: {e}")
+            return {}
+
+    def test_roundtrip(self, marker: str) -> bool:
+        try:
+            r, t = self._request("GET", "/character/me")
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            state = body.get("state") or {}
+            persisted = (state.get("player") or {}).get("__smoke_marker__")
+            ok = (r.status_code == 200 and persisted == marker)
+            detail = f"persisted_marker={persisted!r} expected={marker!r}"
+            self._record("GET /api/character/me (round-trip)", ok,
+                         r.status_code, t, detail)
+            return ok
+        except Exception as e:
+            self._record("GET /api/character/me (round-trip)", False, 0, 0.0,
+                         f"exception: {e}")
+            return False
+
+    def test_checkpoint_flow(self, base_state: Dict[str, Any]) -> bool:
+        cp_state = json.loads(json.dumps(base_state))
+        cp_marker = f"checkpoint-{int(time.time())}"
+        cp_state.setdefault("player", {})
+        cp_state["player"]["__checkpoint_marker__"] = cp_marker
+        cp_state["player"]["gold"] = 999
+
+        try:
+            r, t = self._request("POST", "/game/checkpoint",
+                                 json={"state": cp_state})
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            ok = (r.status_code == 200 and body.get("ok") is True)
+            self._record("POST /api/game/checkpoint", ok, r.status_code, t,
+                         f"ok={body.get('ok')}")
+            if not ok:
+                return False
+        except Exception as e:
+            self._record("POST /api/game/checkpoint", False, 0, 0.0,
+                         f"exception: {e}")
+            return False
+
+        dirty = json.loads(json.dumps(cp_state))
+        dirty["player"]["__checkpoint_marker__"] = "DIRTY"
+        dirty["player"]["gold"] = 1
+        try:
+            r, t = self._request("POST", "/game/save", json={"state": dirty})
+            ok = r.status_code == 200
+            self._record("POST /api/game/save (dirty mutation)", ok,
+                         r.status_code, t, "pre-restore mutation")
+            if not ok:
+                return False
+        except Exception as e:
+            self._record("POST /api/game/save (dirty mutation)", False, 0, 0.0,
+                         f"exception: {e}")
+            return False
+
+        try:
+            r, t = self._request("POST", "/game/restore-checkpoint")
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            restored = (body.get("state") or {}).get("player", {})
+            ok = (r.status_code == 200
+                  and restored.get("__checkpoint_marker__") == cp_marker
+                  and restored.get("gold") == 999)
+            detail = (f"restored_marker={restored.get('__checkpoint_marker__')!r} "
+                      f"gold={restored.get('gold')}")
+            self._record("POST /api/game/restore-checkpoint", ok,
+                         r.status_code, t, detail)
+            return ok
+        except Exception as e:
+            self._record("POST /api/game/restore-checkpoint", False, 0, 0.0,
+                         f"exception: {e}")
+            return False
+
+    def test_leaderboard(self) -> None:
+        try:
+            r = requests.get(f"{API}/game/leaderboard", timeout=TIMEOUT)
+            t = r.elapsed.total_seconds()
+            body = {}
+            try:
+                body = r.json()
+            except Exception:
+                pass
+            ok = (r.status_code == 200 and isinstance(body.get("leaderboard"), list))
+            n = len(body.get("leaderboard") or [])
+            self._record("GET /api/game/leaderboard", ok, r.status_code, t,
+                         f"entries={n}")
+        except Exception as e:
+            self._record("GET /api/game/leaderboard", False, 0, 0.0,
+                         f"exception: {e}")
+
+    def test_static_asset(self) -> None:
+        path = "/api/static/sprites/player_adhamb.png"
+        try:
+            r = requests.get(f"{BACKEND_URL}{path}", timeout=TIMEOUT, stream=True)
+            t = r.elapsed.total_seconds()
+            ct = r.headers.get("Content-Type", "")
+            size = int(r.headers.get("Content-Length") or 0)
+            if size == 0:
+                content = r.content
+                size = len(content)
+            ok = (r.status_code == 200 and ct.startswith("image/") and size > 1000)
+            self._record(f"GET {path}", ok, r.status_code, t,
+                         f"content_type={ct} size={size}")
+        except Exception as e:
+            self._record(f"GET {path}", False, 0, 0.0, f"exception: {e}")
+
+    def run(self) -> int:
+        print(colorize(
+            "\n══════════════════════════════════════════════════════════════════\n"
+            "  DEPLOYMENT READINESS SMOKE TEST — Synthetic Sparks FastAPI\n"
+            f"  Backend: {BACKEND_URL}\n"
+            "══════════════════════════════════════════════════════════════════",
+            "cyan"))
+
+        print(colorize("\n[1] Server alive check", "bold"))
+        self.test_root()
+
+        print(colorize("\n[2] Automation bypass auth flow", "bold"))
+        auth = self.test_automation_bypass()
+        if not auth:
+            print(colorize("\nAUTH FAILED — aborting authenticated tests.", "red"))
+            self._summary()
+            return 1
+
+        print(colorize("\n[3] Character load", "bold"))
+        char_me = self.test_character_me()
+        base_state = (char_me.get("state") or {}) if isinstance(char_me, dict) else {}
+        if not base_state:
+            print(colorize("\nNo baseline state — aborting state tests.", "red"))
+            self._summary()
+            return 1
+
+        print(colorize("\n[4] Full state persistence (save)", "bold"))
+        saved = self.test_save(base_state)
+        marker = saved.get("marker", "")
+
+        print(colorize("\n[5] Save round-trip integrity", "bold"))
+        if marker:
+            self.test_roundtrip(marker)
         else:
-            return default
-    return cur
+            self._record("GET /api/character/me (round-trip)", False, 0, 0.0,
+                         "skipped — save did not return a marker")
 
+        print(colorize("\n[6] Checkpoint save + restore flow", "bold"))
+        self.test_checkpoint_flow(base_state)
 
-# --- Step 1: Automation bypass ---
-print("\n--- Step 1: POST /api/auth/automation-bypass ---")
-r = session.post(f"{API}/auth/automation-bypass")
-ok = r.status_code == 200
-detail = f"status={r.status_code}"
-try:
-    body = r.json()
-    if ok:
-        ok = bool(body.get("access_token")) and body.get("email") == "playwright@nexus.test"
-        detail += f" email={body.get('email')} token_len={len(body.get('access_token',''))}"
-except Exception as e:
-    ok = False
-    detail += f" parse_err={e}"
-record("automation-bypass returns 200 with auth", ok, detail)
+        print(colorize("\n[7] Leaderboard public read", "bold"))
+        self.test_leaderboard()
 
-if not ok:
-    print("Cannot proceed without auth.")
-    sys.exit(1)
+        print(colorize("\n[8] Static asset serving", "bold"))
+        self.test_static_asset()
 
-# --- Step 2: GET /api/character/me — baseline ---
-print("\n--- Step 2: GET /api/character/me ---")
-r = session.get(f"{API}/character/me")
-ok = r.status_code == 200
-detail = f"status={r.status_code}"
-baseline_state = None
-try:
-    body = r.json()
-    baseline_state = body.get("state")
-    detail += f" has_character={body.get('has_character')} player={deep_get(body, 'state.player.name')}"
-except Exception as e:
-    detail += f" parse_err={e}"
-    ok = False
-record("character/me initial fetch 200", ok, detail)
+        return self._summary()
 
-# --- Step 3: POST /api/game/save with new entity-progression fields ---
-print("\n--- Step 3: POST /api/game/save with extended party entry ---")
-
-party_entry = {
-    "uid": "test_x_1",
-    "speciesId": "phreak_1",
-    "name": "Phreak",
-    "level": 3,
-    "hp": 40, "maxHp": 40,
-    "atk": 12, "def": 8, "spd": 10,
-    "skills": ["data_leak"],
-    "tier": 1,
-    "capturedAt": "2026-01-01T00:00:00Z",
-    "ivs": {"hp": 31, "atk": 25, "def": 18, "spd": 22},
-    "rarity": "glitched",
-    "dataLevel": 5,
-    "dataXp": 12,
-    "dataXpToNext": 113,
-    "baseLevel": 3,
-}
-
-state_payload: Dict[str, Any] = baseline_state if isinstance(baseline_state, dict) else {}
-state_payload.setdefault("player", {
-    "name": "PlaywrightRunner", "house": "obsidian",
-    "level": 1, "xp": 0, "xpToNext": 100,
-    "hp": 70, "maxHp": 70, "mp": 30, "maxMp": 30,
-    "atk": 14, "def": 6, "spd": 14, "gold": 50,
-})
-state_payload.setdefault("world", {"currentMap": "conduit_maze", "position": {"x": 2, "y": 1}})
-state_payload["quantum"] = {
-    "party": [party_entry],
-    "extendedStorage": [
-        {
-            "uid": "test_x_storage_1",
-            "speciesId": "glitch_ghost_2",
-            "name": "Glitch",
-            "level": 7,
-            "hp": 55, "maxHp": 55, "atk": 18, "def": 9, "spd": 14,
-            "skills": ["packet_storm"],
-            "tier": 2,
-            "capturedAt": "2026-01-02T00:00:00Z",
-            "ivs": {"hp": 12, "atk": 31, "def": 7, "spd": 28},
-            "rarity": "ascended",
-            "dataLevel": 9,
-            "dataXp": 88,
-            "dataXpToNext": 200,
-            "baseLevel": 7,
-        }
-    ],
-}
-
-r = session.post(f"{API}/game/save", json={"state": state_payload})
-ok = r.status_code == 200
-detail = f"status={r.status_code}"
-echoed_party = None
-try:
-    body = r.json()
-    detail += f" ok={body.get('ok')}"
-    echoed_party = deep_get(body, "state.quantum.party")
-except Exception as e:
-    detail += f" parse_err={e}"
-    ok = False
-record("game/save extended party fields returns 200", ok, detail)
-
-print("\n--- Step 3b: Echo body preserves new fields ---")
-echo_ok = isinstance(echoed_party, list) and len(echoed_party) == 1
-if echo_ok:
-    e0 = echoed_party[0]
-    checks = {
-        "ivs.hp == 31": deep_get(e0, "ivs.hp") == 31,
-        "ivs.atk == 25": deep_get(e0, "ivs.atk") == 25,
-        "ivs.def == 18": deep_get(e0, "ivs.def") == 18,
-        "ivs.spd == 22": deep_get(e0, "ivs.spd") == 22,
-        "rarity == glitched": e0.get("rarity") == "glitched",
-        "dataLevel == 5": e0.get("dataLevel") == 5,
-        "dataXp == 12": e0.get("dataXp") == 12,
-        "dataXpToNext == 113": e0.get("dataXpToNext") == 113,
-        "baseLevel == 3": e0.get("baseLevel") == 3,
-    }
-    failed = [k for k, v in checks.items() if not v]
-    echo_ok = not failed
-    record(
-        "echo preserves new fields in save response",
-        echo_ok,
-        "all preserved" if echo_ok else f"failed: {failed} | echoed={json.dumps(e0)[:300]}",
-    )
-else:
-    record("echo preserves new fields in save response", False, f"echoed_party={echoed_party}")
-
-# --- Step 4: GET /api/character/me after save (round-trip) ---
-print("\n--- Step 4: GET /api/character/me after save ---")
-r = session.get(f"{API}/character/me")
-ok = r.status_code == 200
-detail = f"status={r.status_code}"
-persisted_party = None
-persisted_storage = None
-try:
-    body = r.json()
-    persisted_party = deep_get(body, "state.quantum.party")
-    persisted_storage = deep_get(body, "state.quantum.extendedStorage")
-    detail += f" party_len={len(persisted_party or [])} storage_len={len(persisted_storage or [])}"
-except Exception as e:
-    detail += f" parse_err={e}"
-    ok = False
-record("character/me returns 200 post-save", ok, detail)
-
-print("\n--- Step 4b: Persisted party preserves new fields ---")
-pp_ok = isinstance(persisted_party, list) and len(persisted_party) == 1
-if pp_ok:
-    p0 = persisted_party[0]
-    checks = {
-        "uid": p0.get("uid") == "test_x_1",
-        "speciesId": p0.get("speciesId") == "phreak_1",
-        "name": p0.get("name") == "Phreak",
-        "ivs.hp == 31": deep_get(p0, "ivs.hp") == 31,
-        "ivs.atk == 25": deep_get(p0, "ivs.atk") == 25,
-        "ivs.def == 18": deep_get(p0, "ivs.def") == 18,
-        "ivs.spd == 22": deep_get(p0, "ivs.spd") == 22,
-        "rarity == glitched": p0.get("rarity") == "glitched",
-        "dataLevel == 5": p0.get("dataLevel") == 5,
-        "dataXp == 12": p0.get("dataXp") == 12,
-        "dataXpToNext == 113": p0.get("dataXpToNext") == 113,
-        "baseLevel == 3": p0.get("baseLevel") == 3,
-    }
-    failed = [k for k, v in checks.items() if not v]
-    pp_ok = not failed
-    record(
-        "persisted party preserves IVs/rarity/dataLevel/dataXp/dataXpToNext/baseLevel",
-        pp_ok,
-        "all preserved" if pp_ok else f"failed: {failed} | entry={json.dumps(p0)[:400]}",
-    )
-else:
-    record(
-        "persisted party preserves IVs/rarity/dataLevel/dataXp/dataXpToNext/baseLevel",
-        False,
-        f"persisted_party={persisted_party}",
-    )
-
-print("\n--- Step 4c: Persisted extendedStorage preserves new fields ---")
-ps_ok = isinstance(persisted_storage, list) and len(persisted_storage) == 1
-if ps_ok:
-    s0 = persisted_storage[0]
-    checks = {
-        "uid": s0.get("uid") == "test_x_storage_1",
-        "rarity == ascended": s0.get("rarity") == "ascended",
-        "ivs.atk == 31": deep_get(s0, "ivs.atk") == 31,
-        "dataLevel == 9": s0.get("dataLevel") == 9,
-        "dataXp == 88": s0.get("dataXp") == 88,
-        "dataXpToNext == 200": s0.get("dataXpToNext") == 200,
-        "baseLevel == 7": s0.get("baseLevel") == 7,
-    }
-    failed = [k for k, v in checks.items() if not v]
-    ps_ok = not failed
-    record(
-        "persisted extendedStorage preserves new fields",
-        ps_ok,
-        "all preserved" if ps_ok else f"failed: {failed} | entry={json.dumps(s0)[:400]}",
-    )
-else:
-    record(
-        "persisted extendedStorage preserves new fields",
-        False,
-        f"persisted_storage={persisted_storage}",
-    )
-
-# --- Step 5: Legacy party (no new fields) — backwards compat ---
-print("\n--- Step 5: POST /api/game/save with LEGACY party entry ---")
-
-legacy_state = dict(state_payload)
-legacy_state["quantum"] = {
-    "party": [
-        {
-            "uid": "legacy_x_1",
-            "speciesId": "phreak_1",
-            "name": "OldPhreak",
-            "level": 2,
-            "hp": 38, "maxHp": 38, "atk": 11, "def": 7, "spd": 9,
-            "skills": ["data_leak"],
-            "tier": 1,
-            "capturedAt": "2025-12-01T00:00:00Z",
-        }
-    ],
-    "extendedStorage": [],
-}
-
-r = session.post(f"{API}/game/save", json={"state": legacy_state})
-ok = r.status_code == 200
-detail = f"status={r.status_code}"
-try:
-    body = r.json()
-    detail += f" ok={body.get('ok')}"
-    legacy_echoed = deep_get(body, "state.quantum.party")
-    if isinstance(legacy_echoed, list) and len(legacy_echoed) == 1:
-        e0 = legacy_echoed[0]
-        has_new = any(k in e0 for k in ("ivs", "rarity", "dataLevel", "dataXp", "dataXpToNext", "baseLevel"))
-        detail += f" legacy_entry_uid={e0.get('uid')} extra_new_fields_injected={has_new}"
-except Exception as e:
-    ok = False
-    detail += f" parse_err={e}"
-record("legacy party (no new fields) saves with 200", ok, detail)
-
-r = session.get(f"{API}/character/me")
-legacy_persist_ok = r.status_code == 200
-detail = f"status={r.status_code}"
-try:
-    body = r.json()
-    party = deep_get(body, "state.quantum.party")
-    if isinstance(party, list) and len(party) == 1 and party[0].get("uid") == "legacy_x_1":
-        detail += " legacy entry persisted (uid matches)"
-    else:
-        legacy_persist_ok = False
-        detail += f" unexpected party={party}"
-except Exception as e:
-    legacy_persist_ok = False
-    detail += f" parse_err={e}"
-record("legacy party persists cleanly through /character/me", legacy_persist_ok, detail)
-
-# --- Step 6: Checkpoint round-trip ---
-print("\n--- Step 6: POST /api/game/checkpoint + GET back ---")
-r = session.post(f"{API}/game/checkpoint", json={"state": state_payload})
-cp_post_ok = r.status_code == 200
-detail = f"status={r.status_code}"
-try:
-    body = r.json()
-    detail += f" ok={body.get('ok')}"
-except Exception as e:
-    detail += f" parse_err={e}"
-    cp_post_ok = False
-record("game/checkpoint returns 200", cp_post_ok, detail)
-
-r = session.get(f"{API}/character/me")
-cp_load_ok = r.status_code == 200
-detail = f"status={r.status_code}"
-try:
-    body = r.json()
-    cp_party = deep_get(body, "checkpoint.quantum.party")
-    if isinstance(cp_party, list) and len(cp_party) == 1:
-        e0 = cp_party[0]
-        checks = {
-            "rarity": e0.get("rarity") == "glitched",
-            "dataLevel": e0.get("dataLevel") == 5,
-            "ivs.hp": deep_get(e0, "ivs.hp") == 31,
-            "baseLevel": e0.get("baseLevel") == 3,
-        }
-        failed = [k for k, v in checks.items() if not v]
+    def _summary(self) -> int:
+        print(colorize(
+            "\n══════════════════════════════════════════════════════════════════\n"
+            "  SUMMARY\n"
+            "══════════════════════════════════════════════════════════════════",
+            "cyan"))
+        passed = sum(1 for r in self.results if r["ok"])
+        total = len(self.results)
+        print(f"  Passed:       {passed} / {total}")
+        print(f"  500-class:    {self.fivexx_count}")
+        print(f"  Slow (>2s):   {self.slow_count}")
+        failed = [r for r in self.results if not r["ok"]]
         if failed:
-            cp_load_ok = False
-            detail += f" failed_checks={failed} entry={json.dumps(e0)[:300]}"
+            print(colorize("\n  FAILURES:", "red"))
+            for r in failed:
+                print(f"    ✗ {r['name']}  HTTP {r['status']}  "
+                      f"{r['elapsed_s']}s  — {r['detail']}")
         else:
-            detail += " checkpoint party preserves new fields"
-    else:
-        cp_load_ok = False
-        detail += f" cp_party={cp_party}"
-except Exception as e:
-    cp_load_ok = False
-    detail += f" parse_err={e}"
-record("checkpoint round-trip preserves new fields", cp_load_ok, detail)
+            print(colorize("\n  All checks PASSED.", "green"))
+        print("")
+        return 0 if not failed and self.fivexx_count == 0 else 1
 
-# --- Step 7: Root + leaderboard ---
-print("\n--- Step 7: GET /api/ + /api/game/leaderboard ---")
-r = session.get(f"{API}/")
-ok = r.status_code == 200
-record("GET /api/ returns 200", ok, f"status={r.status_code} body={r.text[:120]}")
 
-r = session.get(f"{API}/game/leaderboard")
-ok = r.status_code == 200
-detail = f"status={r.status_code}"
-try:
-    body = r.json()
-    detail += f" leaderboard_len={len(body.get('leaderboard', []))}"
-except Exception as e:
-    ok = False
-    detail += f" parse_err={e}"
-record("GET /api/game/leaderboard returns 200", ok, detail)
-
-# --- Summary ---
-print("\n" + "=" * 60)
-print("SUMMARY")
-print("=" * 60)
-passed = sum(1 for _, ok, _ in results if ok)
-total = len(results)
-for name, ok, detail in results:
-    print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
-print(f"\n{passed}/{total} passed")
-
-sys.exit(0 if passed == total else 1)
+if __name__ == "__main__":
+    try:
+        rc = Smoke().run()
+        sys.exit(rc)
+    except Exception:
+        traceback.print_exc()
+        sys.exit(2)
