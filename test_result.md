@@ -317,13 +317,102 @@ metadata:
   run_ui: false
 
 test_plan:
-  current_focus:
-    - "Automation bypass security hardening — /api/auth/automation-bypass"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
+backend_smoke:
+  - task: "Operator Synergy Framework — persistence via /api/game/save with synergyNodes/synergyPoints"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          OPERATOR SYNERGY FRAMEWORK BACKEND SMOKE — 9/9 PASS.
+
+          1) POST /api/auth/automation-bypass → 200
+             body: {"id":"...","email":"playwright@nexus.test",
+                    "name":"PlaywrightRunnerNode01","role":"user",
+                    "access_token":"<JWT>","redirect":"/conduit-maze"}
+             httpOnly access_token + refresh_token cookies set.
+
+          2) GET /api/character/me → 200
+             has_character=true, player.name=PlaywrightRunner.
+
+          3) POST /api/game/save with new optional fields:
+             state.player.synergyNodes = ["dep_cheap_1", "oc_pwr_1"]
+             state.player.synergyPoints = 3
+             → 200, response state.player echoes back both fields verbatim.
+
+          4) GET /api/character/me (persistence round-trip) → 200
+             state.player.synergyNodes = ["dep_cheap_1", "oc_pwr_1"]
+             state.player.synergyPoints = 3
+             ✅ Fields persisted exactly through save → reload.
+
+          5) POST /api/game/save with LEGACY player (no synergyNodes /
+             synergyPoints fields stripped out) → 200, ok=true.
+             ✅ Backwards compatible — pydantic GameStatePayload.state is
+             a plain Dict[str, Any] so extra fields are neither required
+             nor forbidden.
+
+          6a) POST /api/game/checkpoint with synergy state → 200, ok=true.
+          6b) GET /api/character/me → 200, checkpoint.player.synergyNodes
+              and synergyPoints both round-tripped correctly through the
+              checkpoint slot.
+
+          7a) GET /api/ → 200 {"message":"Synthetic Sparks API","version":"1.0"}
+          7b) GET /api/game/leaderboard → 200 with a populated leaderboard
+              array (4 entries).
+
+          CONCLUSION: New optional player.synergyNodes / player.synergyPoints
+          fields persist correctly through both /api/game/save and
+          /api/game/checkpoint round-trips. Legacy saves without the fields
+          still succeed (no schema rejection). No other /api/* endpoints
+          regressed. No code changes made by tester.
+
 agent_communication:
+  - agent: "main"
+    message: |
+      Phase B: OPERATOR SYNERGY FRAMEWORK shipped.
+
+      • NEW data file: src/data/operatorSynergy.ts — 20 nodes across
+        5 branches (DEPLOYMENT, STABILITY, OVERCLOCK, CORRUPTION,
+        PROTOCOL). All passive — buff the currently DEPLOYED entity.
+      • NEW screen: app/operator-framework.tsx (route /operator-framework)
+      • GameContext now carries optional player.synergyNodes[] and
+        player.synergyPoints. +1 synergy point per level-up. Saved via
+        the SAME /api/game/save endpoint (no API surface change — it
+        accepts the full state blob).
+      • combat.tsx now imports computeSynergy() and applies:
+         OVERCLOCK → entity ATK ×(1+entityAtkMod), crit chance.
+         BUFFER  → entity dmg taken − %; operator absorbs %.
+         HOT-PATCH → once-per-fight 60% revive on disconnect.
+         CORRUPTION SPREAD/LEECH/PURGE wired into endPlayerTurn
+            DoT tick + on-disconnect detonation.
+         GLITCH FIELD → 25% enemy misfire chance per turn.
+         PASSIVE GRID → operator solo strikes restore entity stab.
+      • UI POLISH:
+        - PixelText: new `autoFit` prop (numberOfLines=1 +
+          adjustsFontSizeToFit + minimumFontScale 0.7). Removed the
+          duplicate letterSpacing that was crowding small phones.
+        - PixelButton: tighter `sm` padding (8 instead of 12), inner
+          textWrap with 4px paddingHorizontal so corner glyphs never
+          collide with text. autoFit on by default.
+        - combat.tsx: enemy / minion / player name plates use autoFit.
+          actionGrid swapped to flexBasis 32% with rowGap+columnGap so
+          the 3×2 buttons align perfectly even.
+      • game.tsx HUD: added SYNERGY shortcut button (purple).
+        Pause menu has new "SYNERGY GRID" entry under SKILL TREE.
+
+      ASK FOR BACKEND TEST: please verify /api/game/save accepts the
+      new optional fields (synergyNodes, synergyPoints) and that
+      /api/character/me returns them intact through a save→load cycle.
   - agent: "testing"
     message: |
       Post-frontend-change backend smoke test — ALL PASS.

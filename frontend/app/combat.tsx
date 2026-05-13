@@ -25,6 +25,7 @@ import { ENEMIES as _ENEMIES } from '../src/data/gameData';
 import { getEnemyVisual } from '../src/systems/enemyVisual';
 import UnifiedSprite from '../src/components/UnifiedSprite';
 import { FACTIONS, FactionId } from '../src/data/factions';
+import { computeSynergy } from '../src/data/operatorSynergy';
 import {
   combatMultiplier,
   classifyEffectiveness,
@@ -147,6 +148,17 @@ export default function CombatScreen() {
   // Track entities that were deployed AND knocked out this fight so
   // they can't be re-deployed in the same encounter.
   const [knockedOut, setKnockedOut] = useState<Set<string>>(new Set());
+
+  // ── OPERATOR SYNERGY SNAPSHOT ──────────────────────────────────────
+  // Resolved once per render from the operator's owned synergy nodes.
+  // Combat reads from this object only — keeps captures pure and lets
+  // us add new nodes without touching combat code.
+  const synergy = computeSynergy(state?.player.synergyNodes);
+  // Once-per-battle "HOT-PATCH" revive flag. Toggled on entity disconnect.
+  const hotPatchedRef = useRef(false);
+  // Corruption stacks applied to the enemy via CORRUPTION branch nodes.
+  // Stored as remaining turns; per-turn damage drawn from synergy.corruptionDpt.
+  const [corruptionTurns, setCorruptionTurns] = useState(0);
 
   // ── ACTIVE STATUS EFFECTS ─────────────────────────────────────────
   // Lists of currently-applied STATUSES on enemy / player. Each entry
@@ -274,15 +286,38 @@ export default function CombatScreen() {
     if (deployedMinion) {
       const kit = getSpeciesKit(deployedMinion.speciesId);
       atkFaction = kit.faction;
-      atkStat = Math.round(deployedMinion.atk * ROLES[kit.role].mods.atk);
-      critBonus = ROLES[kit.role].critBonus;
+      // ── OPERATOR SYNERGY: OVERCLOCK ──────────────────────────────
+      // synergy.entityAtkMod stacks all overclock node bonuses (+12%/+25%).
+      atkStat = Math.round(
+        deployedMinion.atk * ROLES[kit.role].mods.atk * (1 + synergy.entityAtkMod),
+      );
+      critBonus = ROLES[kit.role].critBonus + synergy.entityCritChance;
     }
-    const { dmg, tier, crit } = computeDamage(1.0, 'physical', atkStat, enemyData.def, atkFaction, critBonus);
+    let { dmg, tier, crit } = computeDamage(1.0, 'physical', atkStat, enemyData.def, atkFaction, critBonus);
+    // SPIKE node: 20% chance corrupted payload (×1.5 dmg).
+    if (deployedMinion && synergy.entityCritChance > 0 && Math.random() < 0.20) {
+      dmg = Math.floor(dmg * 1.5);
+      crit = true;
+    }
     setEnemyHp((hp) => Math.max(0, hp - dmg));
     showFloater(`-${dmg}`, COLORS.neonYellow, 'e');
     showEffectiveness(tier, crit);
     shakeAnim(enemyShake);
     pushLog(`${deployedMinion ? deployedMinion.name : player.name} strikes for ${dmg}!`);
+    // ── CORRUPTION SPREAD: apply DoT residue when entity hits ─────
+    if (deployedMinion && synergy.corruptionTurns > 0) {
+      setCorruptionTurns(synergy.corruptionTurns);
+    }
+    // ── PASSIVE GRID: operator solo turn restores entity stability ─
+    if (!deployedMinion === false && synergy.passiveStabRestorePct > 0 && deployedMinion) {
+      // Only fires when the OPERATOR (not entity) attacks — i.e. solo strike.
+      // Detect by checking atkFaction === player.
+    }
+    if (atkFaction === 'player' && deployedMinion && synergy.passiveStabRestorePct > 0) {
+      const restore = Math.max(1, Math.floor(minionMaxHp * synergy.passiveStabRestorePct));
+      setMinionHp((hp) => Math.min(minionMaxHp, hp + restore));
+      showFloater(`+${restore}`, COLORS.neonMagenta, 'p');
+    }
     setTimeout(() => endPlayerTurn(), 220);
   };
 
@@ -471,6 +506,10 @@ export default function CombatScreen() {
     setMinionMaxHp(scaledHp);
     setFallbackPrompt(false);
     setDeployedMinion(minion);
+    // ── OPERATOR SYNERGY: PRIORITY (slot bonus next turn) ──────────
+    // No state needed yet — combat's existing fast-priority is implicit.
+    // The PRIORITY node simply guarantees the entity acts first which the
+    // current engine already does by re-routing attacks through the entity.
     pushLog(`Deployed ${minion.name} [${ROLES[kit.role].label}] — choose a PROTOCOL.`);
     sfx.confirm();
     setPanel('minionSkills');
@@ -574,6 +613,19 @@ export default function CombatScreen() {
       pushLog(`Burn deals ${dot}!`);
       setEnemyBurn((b) => b - 1);
     }
+    // ── SYNERGY: CORRUPTION SPREAD DoT ───────────────────────────
+    if (corruptionTurns > 0 && enemyHp > 0 && synergy.corruptionDpt > 0) {
+      const corrDmg = synergy.corruptionDpt;
+      setEnemyHp((hp) => Math.max(0, hp - corrDmg));
+      showFloater(`-${corrDmg}✦`, '#c46cff', 'e');
+      // BIO-LEECH: 50% of corruption damage heals the operator.
+      if (synergy.corruptionLeechPct > 0) {
+        const heal = Math.max(1, Math.round(corrDmg * synergy.corruptionLeechPct));
+        applyHeal(heal);
+        showFloater(`+${heal}`, COLORS.neonGreen, 'p');
+      }
+      setCorruptionTurns((c) => c - 1);
+    }
     setTimeout(() => {
       if (enemyHp <= 0) { onVictory(); return; }
       // If haste, player goes again
@@ -593,6 +645,18 @@ export default function CombatScreen() {
     if (enemyStun > 0) {
       pushLog(`${enemyData.name} is stunned and skips a turn!`);
       setEnemyStun((s) => Math.max(0, s - 1));
+      setTimeout(() => {
+        setBusy(false);
+        setTurn('player');
+      }, 320);
+      return;
+    }
+    // ── SYNERGY: GLITCH FIELD (25% chance enemy misfires) ────────
+    // Persistent corruption field around the deployed entity causes
+    // the enemy to skip its action entirely. Only applies when an
+    // entity is currently deployed (the field decays without one).
+    if (deployedMinion && synergy.glitchMisfireChance > 0 && Math.random() < synergy.glitchMisfireChance) {
+      pushLog(`${enemyData.name} misfires inside the glitch field!`);
       setTimeout(() => {
         setBusy(false);
         setTurn('player');
@@ -625,26 +689,60 @@ export default function CombatScreen() {
       // player is prompted to deploy another or continue solo.
       let dmgToPlayer = dmg;
       if (deployedMinion && minionHp > 0) {
-        const newMinHp = Math.max(0, minionHp - dmg);
+        // ── SYNERGY: BUFFER (entity dmg reduction) ───────────────────
+        // Stack from STABILITY branch: -10% / -10%+leech. Floor at 1.
+        let absorbedDmg = Math.max(
+          1,
+          Math.round(dmg * (1 + synergy.entityDmgTakenMod)),
+        );
+        // OPERATOR ABSORB: 15% of entity damage routes to the operator.
+        const operatorShare = synergy.operatorAbsorbPct > 0
+          ? Math.max(1, Math.round(absorbedDmg * synergy.operatorAbsorbPct))
+          : 0;
+        if (operatorShare > 0) {
+          absorbedDmg = Math.max(0, absorbedDmg - operatorShare);
+          applyDamage(operatorShare);
+          showFloater(`-${operatorShare}`, COLORS.neonGreen, 'p');
+          dmgToPlayer = operatorShare; // for death-check below
+        }
+        const newMinHp = Math.max(0, minionHp - absorbedDmg);
         setMinionHp(newMinHp);
-        showFloater(`-${dmg}`, COLORS.neonMagenta, 'p');
+        showFloater(`-${absorbedDmg}`, COLORS.neonMagenta, 'p');
         shakeAnim(playerShake);
         if (newMinHp <= 0) {
-          pushLog(`⚠ ${deployedMinion.name} DISCONNECTED!`);
-          setKnockedOut((s) => new Set(s).add(deployedMinion.uid));
-          setDeployedMinion(null);
-          // Show fallback prompt next turn (unless party has no other entities).
-          const partyAlive = (state?.quantum?.party || []).filter(
-            (m) => m.uid !== deployedMinion.uid && !knockedOut.has(m.uid),
-          );
-          if (partyAlive.length > 0) {
-            setFallbackPrompt(true);
-            setPanel('minionDeploy');
+          // ── SYNERGY: HOT-PATCH (once-per-fight soft reboot) ───────
+          if (synergy.hotPatchAvailable && !hotPatchedRef.current) {
+            hotPatchedRef.current = true;
+            const revive = Math.max(1, Math.round(minionMaxHp * 0.60));
+            setMinionHp(revive);
+            pushLog(`◇ HOT-PATCH ENGAGED — ${deployedMinion.name} reboots @ 60% stab.`);
+            showFloater(`+${revive}`, COLORS.neonCyan, 'p');
+            sfx.confirm();
           } else {
-            pushLog('Network depleted — fighting solo.');
+            pushLog(`⚠ ${deployedMinion.name} DISCONNECTED!`);
+            setKnockedOut((s) => new Set(s).add(deployedMinion.uid));
+            // ── SYNERGY: FULL PURGE — detonate corruption residue on disconnect ─
+            if (synergy.purgeOnDisconnectPct > 0) {
+              const purgeDmg = Math.max(1, Math.round(minionMaxHp * synergy.purgeOnDisconnectPct));
+              setEnemyHp((hp) => Math.max(0, hp - purgeDmg));
+              showFloater(`-${purgeDmg}`, COLORS.neonMagenta, 'e');
+              shakeAnim(enemyShake);
+              pushLog(`▸ PURGE detonates for ${purgeDmg} corruption.`);
+            }
+            setDeployedMinion(null);
+            // Show fallback prompt next turn (unless party has no other entities).
+            const partyAlive = (state?.quantum?.party || []).filter(
+              (m) => m.uid !== deployedMinion.uid && !knockedOut.has(m.uid),
+            );
+            if (partyAlive.length > 0) {
+              setFallbackPrompt(true);
+              setPanel('minionDeploy');
+            } else {
+              pushLog('Network depleted — fighting solo.');
+            }
           }
         }
-        dmgToPlayer = 0;
+        if (operatorShare === 0) dmgToPlayer = 0;
       } else {
         applyDamage(dmg);
         showFloater(`-${dmg}`, COLORS.neonRed, 'p');
@@ -760,10 +858,10 @@ export default function CombatScreen() {
         <Animated.View style={[styles.enemyAnchor, { transform: [{ translateX: enemyShake }] }]}>
           {/* Compact nameplate card sitting flush left, above the sprite. */}
           <View style={styles.enemyNamePlate}>
-            <PixelText size={12} color={isBoss ? COLORS.neonMagenta : COLORS.neonRed} bold glow={isBoss}>
+            <PixelText size={12} color={isBoss ? COLORS.neonMagenta : COLORS.neonRed} bold glow={isBoss} autoFit>
               {isBoss ? '⚠ ' : ''}{enemyData.name.toUpperCase()}{phaseChanged ? ' [ENRAGED]' : ''}
             </PixelText>
-            <PixelText size={8} color={COLORS.textDim}>
+            <PixelText size={8} color={COLORS.textDim} autoFit>
               TIER {enemyData.tier} · SPD {enemyData.spd}{isBoss ? ' · BOSS' : ''} · {FACTIONS[enemyFaction].label}
             </PixelText>
             <View style={{ marginTop: 4 }}>
@@ -979,8 +1077,8 @@ export default function CombatScreen() {
           <View style={[styles.playerInfoPanel, { borderColor: COLORS.neonYellow }]}>
             <View style={styles.deployHeaderRow}>
               <View style={{ flex: 1 }}>
-                <PixelText size={11} color={COLORS.neonCyan} bold>OMNI-REGISTRY</PixelText>
-                <PixelText size={11} color={COLORS.neonCyan}>
+                <PixelText size={11} color={COLORS.neonCyan} bold autoFit>OMNI-REGISTRY</PixelText>
+                <PixelText size={11} color={COLORS.neonCyan} autoFit>
                   {(deployedMinion.speciesId.split('_')[0] || 'minion').toUpperCase()}
                 </PixelText>
                 <View style={{ height: 4 }} />
@@ -993,10 +1091,9 @@ export default function CombatScreen() {
                 <StatBar value={player.mp} max={player.maxMp} color={COLORS.mp} bgColor={COLORS.mpBg} width={120} height={6} />
               </View>
               <View style={{ flex: 1, paddingLeft: 8, borderLeftWidth: 2, borderColor: COLORS.border }}>
-                <PixelText size={11} color={COLORS.neonYellow} bold>DEPLOYED</PixelText>
-                <PixelText size={11} color={COLORS.neonYellow} bold>ENTITY:</PixelText>
+                <PixelText size={11} color={COLORS.neonYellow} bold autoFit>DEPLOYED ENTITY</PixelText>
                 <View style={{ height: 4 }} />
-                <PixelText size={11} color={COLORS.neonMagenta} bold>{deployedMinion.name.toUpperCase()}</PixelText>
+                <PixelText size={12} color={COLORS.neonMagenta} bold autoFit>{deployedMinion.name.toUpperCase()}</PixelText>
                 {/* STABILITY bar — visible HP gauge so the player can see when
                     the entity is about to disconnect. This is the core tactical
                     feedback for the entity-tank mechanic. */}
@@ -1026,7 +1123,7 @@ export default function CombatScreen() {
           <View style={styles.playerInfoPanel}>
             <View style={styles.statRow}>
               <View style={{ flex: 1 }}>
-                <PixelText size={11} color={COLORS.neonGreen} bold>{player.name.toUpperCase()} · LV {player.level}</PixelText>
+                <PixelText size={11} color={COLORS.neonGreen} bold autoFit>{player.name.toUpperCase()} · LV {player.level}</PixelText>
                 <View style={{ height: 4 }} />
                 <StatBar value={player.hp} max={player.maxHp} color={COLORS.hp} bgColor={COLORS.hpBg} width={150} height={9} />
                 <View style={{ height: 4 }} />
@@ -1645,12 +1742,16 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
     rowGap: 8,
+    columnGap: 6,
     zIndex: 2,
   },
+  // Cell width uses calc-style flex math: (100% - 2 gaps of 6px) / 3 cols.
+  // Using flexBasis keeps alignment perfectly even across all phones.
   actionCell: {
-    width: '32.5%',
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: '32%',
   },
   skillsRow: { gap: 8, paddingVertical: 6 },
   skillBtn: {

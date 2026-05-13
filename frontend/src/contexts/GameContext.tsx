@@ -22,6 +22,10 @@ export type GameState = {
     gold: number;
     skillPoints: number;
     abilities: string[];
+    /** Operator Framework — synergy nodes that buff deployed entities. */
+    synergyNodes?: string[];
+    /** Points spent on synergy tree (separate pool from skillPoints). */
+    synergyPoints?: number;
     equipped: { weapon: string; armor: string };
     inventory: { id: string; qty: number }[];
   };
@@ -227,6 +231,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       level,
       xpToNext,
       skillPoints: sp,
+      // Operator synergy points: 1 per level-up (legacy saves use ?? 0).
+      synergyPoints: leveled
+        ? (next.player.synergyPoints ?? 0) + (level - next.player.level + (next.player.synergyPoints === undefined ? 1 : 1) - 1)
+        : (next.player.synergyPoints ?? 0),
       maxHp,
       maxMp,
       hp: leveled ? maxHp : next.player.hp,
@@ -251,6 +259,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       skillPoints: next.player.skillPoints - 1,
     };
     setState(next);
+  };
+
+  // ─── Operator Synergy Framework ───────────────────────────────────
+  // Spends 1 synergyPoint to unlock a node. Returns true on success.
+  // The validation (prereq / reqLevel) is done at the call site so this
+  // mutator stays cheap + atomic. Persisted on next saveToServer().
+  const unlockSynergyNode = (id: string): boolean => {
+    if (!stateRef.current) return false;
+    const next = { ...stateRef.current };
+    const owned = next.player.synergyNodes ?? [];
+    if (owned.includes(id)) return false;
+    const points = next.player.synergyPoints ?? 0;
+    if (points <= 0) return false;
+    next.player = {
+      ...next.player,
+      synergyNodes: [...owned, id],
+      synergyPoints: points - 1,
+    };
+    setState(next);
+    return true;
   };
 
   const equip = (slot: 'weapon' | 'armor', itemId: string) => {
@@ -339,7 +367,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       state, setState,
       loadFromServer, saveToServer, saveCheckpoint, restoreCheckpoint, createCharacter,
       applyDamage, applyHeal, applyMpCost,
-      addItem, removeItem, addGold, awardXp, unlockAbility, equip, setPosition,
+      addItem, removeItem, addGold, awardXp, unlockAbility, unlockSynergyNode, equip, setPosition,
       addCapturedMinion, markSpeciesSeen, swapPartyMinion, releaseMinion,
     }}>
       {children}

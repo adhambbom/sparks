@@ -7,12 +7,44 @@ type Props = TextProps & {
   color?: string;
   glow?: boolean;
   bold?: boolean;
+  /** When true, single-line + shrink-to-fit width. Default false. */
+  autoFit?: boolean;
 };
 
-export function PixelText({ size = 14, color = COLORS.text, glow, bold, style, children, ...rest }: Props) {
+/**
+ * PressStart2P pixel text. Single-source-of-truth typography for the game.
+ *
+ * Polish rules applied:
+ *  • letterSpacing=0 (was 1 before — caused crowded layouts on small phones)
+ *  • Optional `autoFit` to shrink long names (enemy/entity/player) into
+ *    their container without clipping.
+ *  • textShadow still doubles as drop-shadow for readability over busy
+ *    cyberpunk backgrounds.
+ */
+export function PixelText({
+  size = 14,
+  color = COLORS.text,
+  glow,
+  bold,
+  autoFit,
+  style,
+  children,
+  numberOfLines,
+  ...rest
+}: Props) {
+  const fitProps = autoFit
+    ? {
+        numberOfLines: 1 as const,
+        adjustsFontSizeToFit: true,
+        minimumFontScale: 0.7,
+        ellipsizeMode: 'tail' as const,
+      }
+    : { numberOfLines };
+
   return (
     <Text
       {...rest}
+      {...fitProps}
       style={[
         styles.base,
         {
@@ -22,7 +54,6 @@ export function PixelText({ size = 14, color = COLORS.text, glow, bold, style, c
           textShadowColor: glow ? color : 'rgba(0,0,0,0.8)',
           textShadowRadius: glow ? 8 : 0,
           textShadowOffset: { width: glow ? 0 : 1, height: glow ? 0 : 1 },
-          letterSpacing: 1,
         },
         style,
       ]}

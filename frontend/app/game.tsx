@@ -1167,6 +1167,16 @@ export default function GameScreen() {
             )}
           </TouchableOpacity>
           <TouchableOpacity
+            style={[styles.shortcutBtn, { borderColor: '#c46cff' }]}
+            onPress={() => { sfx.click(); router.push('/operator-framework'); }}
+            testID="hud-synergy"
+          >
+            <PixelText size={9} color={'#c46cff'} bold>SYNERGY</PixelText>
+            {(state.player.synergyPoints ?? 0) > 0 && (
+              <View style={styles.spDot}><PixelText size={8} color="#000" bold>{state.player.synergyPoints}</PixelText></View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.shortcutBtn, { borderColor: COLORS.neonYellow }]}
             onPress={() => { sfx.click(); router.push('/store'); }}
             testID="hud-store"
@@ -1249,6 +1259,8 @@ export default function GameScreen() {
 
             <View style={{ height: 14 }} />
             <PixelButton title="SKILL TREE" onPress={() => { setPauseOpen(false); router.push('/skills'); }} color={COLORS.neonMagenta} full />
+            <View style={{ height: 6 }} />
+            <PixelButton title="SYNERGY GRID" onPress={() => { setPauseOpen(false); router.push('/operator-framework'); }} color={'#c46cff'} full />
             <View style={{ height: 8 }} />
             <PixelButton title="INVENTORY" onPress={() => { setPauseOpen(false); router.push('/inventory'); }} color={COLORS.neonCyan} full />
             <View style={{ height: 8 }} />
