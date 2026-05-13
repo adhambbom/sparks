@@ -15,7 +15,6 @@ import {
   CORRUPTION_SET,
   ROAD_SET,
   PROPS as FORGOTTEN_PROPS,
-  ENEMY_PACK_OVERRIDE,
 } from '../src/data/forgottenBlock';
 import SheetSprite, { prefetchSheet } from '../src/components/SheetSprite';
 import { PixelText } from '../src/components/PixelText';

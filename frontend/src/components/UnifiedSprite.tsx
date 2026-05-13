@@ -65,17 +65,23 @@ export default function UnifiedSprite({
 
   // ── CSS filter string (web). Native ignores it gracefully —
   // we still get rim-glow + drop-shadow via shadow* props.
+  // READABILITY:
+  //   1) Thicker 4-direction black outline → silhouette separation.
+  //   2) Faction-coloured drop-shadow follows the sprite's ALPHA
+  //      shape (unlike boxShadow which would be a square halo),
+  //      giving a proper rim-light that hugs the silhouette.
   const sat = saturationOverride ?? faction.saturation;
   const cssFilter =
     Platform.OS === 'web'
       ? `saturate(${sat}) contrast(${faction.contrast}) brightness(${faction.brightness})${
           faction.hueRotate ? ` hue-rotate(${faction.hueRotate}deg)` : ''
-        } drop-shadow(0 1px 0 ${faction.outlineColor}) drop-shadow(0 -1px 0 ${faction.outlineColor}) drop-shadow(1px 0 0 ${faction.outlineColor}) drop-shadow(-1px 0 0 ${faction.outlineColor})`
+        } drop-shadow(0 1.5px 0 ${faction.outlineColor}) drop-shadow(0 -1.5px 0 ${faction.outlineColor}) drop-shadow(1.5px 0 0 ${faction.outlineColor}) drop-shadow(-1.5px 0 0 ${faction.outlineColor}) drop-shadow(0 0 ${combat ? 10 : 7}px ${faction.glowColor}) drop-shadow(0 0 ${combat ? 18 : 12}px ${faction.glowColor})`
       : undefined;
 
-  // Combat: larger glow + scanline overlay. Overworld: subtle.
-  const glowRadius = combat ? 18 : 10;
-  const innerRadius = combat ? 36 : 20;
+  // READABILITY: inner-halo radius — the soft background bloom
+  // behind the sprite. Wider in combat for cinematic emphasis,
+  // smaller in overworld so multiple enemies don't blur together.
+  const innerRadius = combat ? 44 : 26;
 
   return (
     <View
@@ -119,23 +125,24 @@ export default function UnifiedSprite({
         }}
       />
 
-      {/* The actual sprite with rim-glow + filter */}
+      {/* The actual sprite — rim-glow now lives INSIDE the cssFilter
+          (drop-shadow with color follows the sprite's alpha), not on
+          the Image's box. This means the glow hugs the silhouette
+          instead of producing a square halo around the bounding box. */}
       <Image
         source={{ uri }}
         style={[
           {
             width: size,
             height: size,
-            // Rim-glow ring around the sprite silhouette.
             ...(Platform.OS === 'web'
-              ? {
-                  filter: cssFilter as any,
-                  boxShadow: `0 0 ${glowRadius}px 1px ${faction.glowColor}`,
-                }
+              ? { filter: cssFilter as any }
               : {
+                  // Native fallback — shadow* gives a softer, square-ish glow
+                  // but it's the best we can do without filter support.
                   shadowColor: faction.glowColor,
-                  shadowOpacity: 0.9,
-                  shadowRadius: glowRadius / 2,
+                  shadowOpacity: 0.95,
+                  shadowRadius: combat ? 12 : 8,
                   shadowOffset: { width: 0, height: 0 },
                 }),
             backgroundColor: 'transparent',
@@ -145,8 +152,10 @@ export default function UnifiedSprite({
       />
 
       {/* Combat: faint scanline overlay on top of the sprite — gives
-          the "enhanced zoom-in" feel without changing the source PNG.
-          Strictly cosmetic; pointerEvents none. */}
+          the "enhanced zoom-in" feel without crushing midtones.
+          Strictly cosmetic; pointerEvents none.
+          READABILITY: alpha dropped to 0.07 (was 0.16) so internal
+          sprite detail (eyes / armor / weapons) stays visible. */}
       {combat && (
         <View
           pointerEvents="none"
@@ -157,13 +166,13 @@ export default function UnifiedSprite({
             overflow: 'hidden',
           }}
         >
-          {Array.from({ length: Math.ceil(size / 4) }).map((_, i) => (
+          {Array.from({ length: Math.ceil(size / 5) }).map((_, i) => (
             <View
               key={i}
               style={{
                 height: 1,
-                marginTop: 3,
-                backgroundColor: 'rgba(0,0,0,0.16)',
+                marginTop: 4,
+                backgroundColor: 'rgba(0,0,0,0.07)',
               }}
             />
           ))}

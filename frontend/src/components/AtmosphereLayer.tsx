@@ -129,12 +129,14 @@ export function AtmosphereLayer({ width, height, intensity = 'subtle' }: Props) 
       {/* 5. FOG LAYER A — wide dim haze drifting slowly right→left.
           Lives BEHIND the scanlines/sweep but ABOVE the world so it
           softens distant tiles. Two stacked horizontal gradients give
-          a credible volumetric feel without bitmap textures. */}
+          a credible volumetric feel without bitmap textures.
+          READABILITY: reduced opacity so foreground entities stay
+          clearly readable — mood lives in the floor + vignette. */}
       <Animated.View
         style={[
           styles.fog,
           {
-            opacity: heavy ? 0.32 : 0.18,
+            opacity: heavy ? 0.18 : 0.10,
             transform: [{
               translateX: fogA.interpolate({
                 inputRange: [0, 1],
@@ -167,7 +169,7 @@ export function AtmosphereLayer({ width, height, intensity = 'subtle' }: Props) 
         style={[
           styles.fog,
           {
-            opacity: heavy ? 0.22 : 0.12,
+            opacity: heavy ? 0.12 : 0.07,
             transform: [{
               translateX: fogB.interpolate({
                 inputRange: [0, 1],
@@ -193,27 +195,29 @@ export function AtmosphereLayer({ width, height, intensity = 'subtle' }: Props) 
         </View>
       </Animated.View>
 
-      {/* 1. VIGNETTE — inset box-shadow draws a soft dark ring around the edges. */}
+      {/* 1. VIGNETTE — inset box-shadow draws a soft dark ring around the edges.
+          READABILITY: softer ring with smaller radius so the play area
+          (where enemies live) stays bright; darkness lives at the corners only. */}
       <View
         style={[
           styles.vignette,
           {
             boxShadow: heavy
-              ? 'inset 0 0 120px 30px rgba(2,4,12,0.85), inset 0 0 60px 6px rgba(0,0,0,0.55)'
-              : 'inset 0 0 90px 18px rgba(2,4,12,0.55), inset 0 0 40px 4px rgba(0,0,0,0.30)',
+              ? 'inset 0 0 90px 8px rgba(2,4,12,0.65), inset 0 0 40px 2px rgba(0,0,0,0.35)'
+              : 'inset 0 0 70px 4px rgba(2,4,12,0.38), inset 0 0 30px 1px rgba(0,0,0,0.20)',
           } as any,
         ]}
       />
 
-      {/* 2. SCANLINES */}
+      {/* 2. SCANLINES — kept very subtle so they never crush sprite midtones. */}
       <View style={styles.scanlines}>
         {scanRows.map((_, i) => (
           <View
             key={i}
             style={{
               height: 1,
-              marginTop: 2,
-              backgroundColor: heavy ? 'rgba(0,0,0,0.16)' : 'rgba(0,0,0,0.10)',
+              marginTop: 3,
+              backgroundColor: heavy ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.05)',
             }}
           />
         ))}
@@ -307,7 +311,7 @@ const styles = StyleSheet.create({
   scanlines: {
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    opacity: Platform.OS === 'web' ? 0.55 : 0.40,
+    opacity: Platform.OS === 'web' ? 0.30 : 0.22,
   },
   sweep: {
     position: 'absolute',

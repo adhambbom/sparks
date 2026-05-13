@@ -607,5 +607,69 @@ agent_communication:
         - game.tsx refactor (>1300 lines).
 
       No backend changes. No new packages. Bundle compiles cleanly.
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  READABILITY BALANCING PASS — Sprites Pop Against Atmosphere   ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Addressed the user's "sprites are too dark / details crushed"
+      feedback. The visual coherence pass was correct in concept but
+      the filter values + atmosphere overlays were over-darkening
+      midtones. Rebalanced the entire rendering stack with
+      readability-first values.
+
+      1) FACTIONS.ts — brightness ≥ 1.05, saturation 0.95–1.10
+         BEFORE: brightness 0.92–0.96, saturation 0.75–0.92  (crushed)
+         AFTER:  brightness 1.08–1.12, saturation 0.95–1.10  (pops)
+         + alpha bumped on every glow color so faction identity
+           reads clearly against the dark cyberpunk floor.
+
+      2) UnifiedSprite.tsx — proper silhouette-following rim glow
+         BEFORE: boxShadow rendered a square halo around the image's
+                 bounding rectangle (looked floaty / disconnected).
+         AFTER:  Two stacked drop-shadow(faction.glowColor) filters
+                 follow the sprite's ALPHA channel, hugging the
+                 silhouette like a real rim light. 4-direction 1.5px
+                 black outline added for separation. Combat mode adds
+                 extra glow + softer scanline (alpha 0.07 vs 0.16).
+
+      3) AtmosphereLayer.tsx — atmospheric darkness lives at EDGES
+         BEFORE: vignette inset 120px @ 0.85α, scanline 0.16α,
+                 fog opacity 0.18–0.32.
+         AFTER:  vignette inset 70-90px @ 0.38–0.65α (corners only),
+                 scanline 0.05–0.08α (barely visible), fog 0.07–0.18α.
+         Result: the centre of the play area stays bright; mood lives
+         at the edges where enemies don't fight for legibility.
+
+      4) Floor / Pavement unchanged
+         The cyber pavement was already dark grey (#1a–58) — keeping
+         it darker than the bright entities is the contrast we want.
+
+      VISUAL VERIFICATION (cyber-kit Faction Sampler)
+        🟣 CORRUPTED AI    — drone reads clearly; eyes / spikes visible
+        🔵 INDUSTRIAL      — mech armour plates / cyan lens visible
+        🔴 MUTANT          — tentacle / red eyes / organic detail
+        🟡 MILITARY        — juggernaut armour / amber HUD
+        💚 PLAYER          — chibi outfit / hair pop cleanly
+        💗 ELITE           — magenta corona, imposing silhouette
+        Every glow now traces the sprite's outline (not a square halo).
+
+      VISUAL VERIFICATION (/game)
+        • Phreak_1 drone — bright red body, purple rim glow,
+          clearly readable against the grey pavement.
+        • Prof Orion + Jax NPCs — amber halos, outfit + props visible.
+        • AI surveillance sweep + ambient particles still cinematic.
+        • Vignette no longer crushes the play area.
+
+      WHAT'S STILL LIGHT-TOUCH ON THE LIST
+        - Per-faction enemy patrol behaviours (movement personality)
+        - Per-faction attack VFX in combat
+        - Player sprite still chibi-style anchor (intentional)
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+      Cyber-kit and /game both visually verified at mobile viewport
+      (390×844).
+
       Live preview confirmed working on mobile viewport (390×844).
 
