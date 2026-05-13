@@ -31,6 +31,9 @@ import {
   getSpeciesKit,
   ROLES,
   STATUSES,
+  StatusId,
+  StatusInstance,
+  aggregateStatusMods,
   getTypeMultiplier,
 } from '../src/data/combatBalance';
 
@@ -144,6 +147,17 @@ export default function CombatScreen() {
   // Track entities that were deployed AND knocked out this fight so
   // they can't be re-deployed in the same encounter.
   const [knockedOut, setKnockedOut] = useState<Set<string>>(new Set());
+
+  // ── ACTIVE STATUS EFFECTS ─────────────────────────────────────────
+  // Lists of currently-applied STATUSES on enemy / player. Each entry
+  // ticks down 1 turn at the end of every enemy turn. DoT statuses
+  // (burn/shock/corrupt/drain) deal % damage on tick. mods like
+  // armor_break/slow apply via aggregateStatusMods.
+  // This is the data-driven plumbing for the rich combatBalance
+  // catalog — finally surfaces it visually + mechanically.
+  const [enemyStatuses, setEnemyStatuses] = useState<StatusInstance[]>([]);
+  // Cooldown map for minion SIGNATURE protocols (skillId → turns).
+  const [signatureCooldowns, setSignatureCooldowns] = useState<Record<string, number>>({});
   // 10 fps tick drives the enemy breathing animation
   useEffect(() => {
     const id = setInterval(() => setAnimTick((t) => (t + 1) % 1024), 100);
@@ -467,6 +481,13 @@ export default function CombatScreen() {
   // a single-turn action that runs through the existing damage pipeline.
   const playerMinionSkill = (skillId: string) => {
     if (busy || !deployedMinion) return;
+    // Cooldown gate — block re-use until counter reaches 0.
+    const cd = signatureCooldowns[skillId] || 0;
+    if (cd > 0) {
+      pushLog(`Protocol on cooldown · ${cd} turns`);
+      sfx.cancel();
+      return;
+    }
     setBusy(true);
     const result = executeMinionSkill({
       minion: deployedMinion,
@@ -492,7 +513,33 @@ export default function CombatScreen() {
     showFloater(`-${finalDmg}`, COLORS.neonMagenta, 'e');
     showEffectiveness(tier, crit);
     shakeAnim(enemyShake);
-    pushLog(result.log + (tier === 'super' ? ' (SUPER EFFECTIVE!)' : tier === 'resisted' ? ' (resisted)' : ''));
+    pushLog(result.log + (tier === 'super' ? ' (VULNERABILITY EXPLOITED!)' : tier === 'resisted' ? ' (resisted)' : ''));
+
+    // ── ROLE-THEMED STATUS AUTO-APPLY ──────────────────────────────
+    // Each class lands its signature debuff with chance =
+    // 35% base + role.statusBonus. Makes every class TACTICALLY
+    // distinct: a HACKER reliably shocks, CORRUPTION reliably DoTs.
+    const roleStatusMap: Record<string, StatusId | null> = {
+      tank: 'armor_break',    // tanks chip armor as they grind
+      striker: 'armor_break', // ASSAULT — armour-break for combo plays
+      disruptor: 'shock',     // HACKER — chance to skip turn
+      support: 'drain',       // SUPPORT — life leech for team
+      artillery: 'corrupt',   // CORRUPTION — DoT specialist
+      swarm: 'burn',          // SWARM — stacking bleed flavour
+    };
+    const statusId = roleStatusMap[kit.role];
+    const applyChance = 0.35 + (ROLES[kit.role].statusBonus || 0);
+    if (statusId && Math.random() < applyChance) {
+      setEnemyStatuses((prev) => {
+        // Refresh duration if same status already active; else add.
+        const without = prev.filter((s) => s.id !== statusId);
+        return [...without, { id: statusId, turns: 3, power: deployedMinion.atk }];
+      });
+      showFloater(`+${STATUSES[statusId].label}`, STATUSES[statusId].color as string, 'e');
+      pushLog(`✦ ${STATUSES[statusId].label} applied!`);
+    }
+    // ── COOLDOWN — placeholder 2-turn cooldown for any minion protocol
+    setSignatureCooldowns((m) => ({ ...m, [skillId]: 2 }));
     // Status modulation — wired into existing state slots:
     if (result.status === 'defense_down') {
       setEnemyDefDebuff(result.statusTurns);
