@@ -12,6 +12,13 @@
 // ============================================================
 import { ENEMIES } from '../data/gameData';
 import { skillsForTier } from '../data/minionSkills';
+import {
+  EntityIVs,
+  EntityRarity,
+  entityXpToNext,
+  rollIVs,
+  rollRarity,
+} from '../data/entityProgression';
 
 export const MAX_PARTY = 6;
 export const BASE_CAPTURE_CHANCE = 0.5;
@@ -40,6 +47,19 @@ export type CapturedMinion = {
   tier: number;
   /** ISO timestamp — used by the registry for sort/lore. */
   capturedAt: string;
+  // ── PROGRESSION ADDICTION LOOP (all OPTIONAL for legacy save compat) ─
+  /** Hidden 0..31 per-stat rolls. Locked at capture time. */
+  ivs?: EntityIVs;
+  /** Capture-time rarity roll. Drives stat mult + visual upgrades. */
+  rarity?: EntityRarity;
+  /** Independent DATA level. Defaults to capture `level`. */
+  dataLevel?: number;
+  /** DATA xp toward next entity level. */
+  dataXp?: number;
+  /** Cached xp-to-next so combat doesn't recompute every tick. */
+  dataXpToNext?: number;
+  /** Level at which this entity was originally captured (for level-scaling math). */
+  baseLevel?: number;
 };
 
 /** Build a CapturedMinion from an enemy id + battle-time stats. */
@@ -56,7 +76,13 @@ export function buildCapturedMinion(args: {
   if (!e) return null;
   const tier = e.tier ?? 1;
   const lvl = args.playerLevel ?? Math.max(1, Math.floor((e.hp || 30) / 10));
-  // Captured minions retain their original stats so they remain useful.
+  // ── PROGRESSION ADDICTION ROLLS ──
+  //  • IVs: hidden 0..31 each (Pokémon-style perfect-roll hunting).
+  //  • RARITY: weighted random (common 70 / rare 22 / glitched 7 / ascended 1).
+  // These are persisted alongside the entity and drive effective stats
+  // through entityProgression.effectiveStat() on read.
+  const ivs = rollIVs();
+  const rarity = rollRarity();
   return {
     uid: `${args.speciesId}_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
     speciesId: args.speciesId,
@@ -70,6 +96,13 @@ export function buildCapturedMinion(args: {
     skills: skillsForTier(tier),
     tier,
     capturedAt: new Date().toISOString(),
+    // Progression fields
+    ivs,
+    rarity,
+    dataLevel: lvl,
+    dataXp: 0,
+    dataXpToNext: entityXpToNext(lvl),
+    baseLevel: lvl,
   };
 }
 

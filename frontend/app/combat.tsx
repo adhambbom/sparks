@@ -28,6 +28,11 @@ import { FACTIONS, FactionId } from '../src/data/factions';
 import { computeSynergy, summarizeActiveSynergy } from '../src/data/operatorSynergy';
 import { getEntityIdentity, SIGNATURE_BY_FACTION } from '../src/data/entitySignatures';
 import {
+  RARITY_META,
+  effectiveStat,
+  ivQualityTag,
+} from '../src/data/entityProgression';
+import {
   combatMultiplier,
   classifyEffectiveness,
   getSpeciesKit,
@@ -84,7 +89,7 @@ export default function CombatScreen() {
   // Did the overworld flag this encounter as a mini-boss roamer? If so we use
   // the Juggernaut sprite to match what was rendered in the castle screen.
   const bossFromRoute = params.boss === '1' || params.mode === 'boss';
-  const { state, applyDamage, applyHeal, applyMpCost, awardXp, addGold, addItem, removeItem, saveToServer, addCapturedMinion, markSpeciesSeen } = useGame();
+  const { state, applyDamage, applyHeal, applyMpCost, awardXp, addGold, addItem, removeItem, saveToServer, addCapturedMinion, awardEntityXp, markSpeciesSeen } = useGame();
   const { startSequence, isCompleted } = useTutorial();
   // ▶ Auto-fire the combat protocol tutorial on the first encounter.
   useEffect(() => {
@@ -526,12 +531,25 @@ export default function CombatScreen() {
     }
     // Initialise the entity's STABILITY pool with role-scaled HP so a
     // TANK actually feels like a tank and an ARTILLERY genuinely is glass.
+    // Also fold in the IV/rarity/DATA-level bonuses so a high-roll
+    // ASCENDED entity actually outperforms a fresh capture of the same species.
     const kit = getSpeciesKit(minion.speciesId);
-    const scaledHp = Math.max(1, Math.round((minion.hp || 40) * ROLES[kit.role].mods.hp));
+    const rarity = minion.rarity ?? 'common';
+    const baseLevel = minion.baseLevel ?? minion.level;
+    const dataLvl = minion.dataLevel ?? minion.level;
+    const effHp  = effectiveStat(minion.hp,  minion.ivs?.hp  ?? 0, dataLvl, baseLevel, rarity);
+    const effAtk = effectiveStat(minion.atk, minion.ivs?.atk ?? 0, dataLvl, baseLevel, rarity);
+    const effDef = effectiveStat(minion.def, minion.ivs?.def ?? 0, dataLvl, baseLevel, rarity);
+    const effSpd = effectiveStat(minion.spd, minion.ivs?.spd ?? 0, dataLvl, baseLevel, rarity);
+    // Patch the deployed minion in-memory with the effective stats so all
+    // downstream readers (playerAttack, playerMinionSkill, faction math)
+    // pull from the boosted numbers automatically.
+    const boostedMinion = { ...minion, hp: effHp, maxHp: effHp, atk: effAtk, def: effDef, spd: effSpd };
+    const scaledHp = Math.max(1, Math.round(effHp * ROLES[kit.role].mods.hp));
     setMinionHp(scaledHp);
     setMinionMaxHp(scaledHp);
     setFallbackPrompt(false);
-    setDeployedMinion(minion);
+    setDeployedMinion(boostedMinion);
     // ── Reset per-deploy trait counters ──
     setTraitFirstAttackUsed(false);
     setTraitFirstSkillUsed(false);
@@ -822,6 +840,18 @@ export default function CombatScreen() {
     addGold(enemyData.gold);
     const leveled = awardXp(enemyData.xp);
     if (leveled) { sfx.levelUp(); pushLog('VERSION UPGRADE! +1 Protocol Slot.'); }
+    // ── ENTITY DATA XP ─────────────────────────────────────────────
+    // Surviving entity gets ~70% of the enemy DATA reward. Levels up
+    // independently — drives the "use them, evolve them" loop.
+    if (deployedMinion && minionHp > 0) {
+      const award = Math.max(1, Math.floor(enemyData.xp * 0.7));
+      const r = awardEntityXp(deployedMinion.uid, award);
+      pushLog(`${deployedMinion.name} +${r.gained} DATA`);
+      if (r.leveled) {
+        sfx.levelUp();
+        pushLog(`▲ ${deployedMinion.name} DATA LV ${r.level}!`);
+      }
+    }
     // Drops
     const drops: string[] = [];
     enemyData.drops?.forEach((d) => {
@@ -1144,14 +1174,31 @@ export default function CombatScreen() {
                 <PixelText size={11} color={COLORS.neonYellow} bold autoFit>DEPLOYED ENTITY</PixelText>
                 <View style={{ height: 4 }} />
                 <PixelText size={12} color={COLORS.neonMagenta} bold autoFit>{deployedMinion.name.toUpperCase()}</PixelText>
-                {/* ── SIGNATURE + TRAIT CHIPS ─────────────────────────
+                {/* ── SIGNATURE + TRAIT + RARITY/IV CHIPS ──────────────
                     Glanceable identity strip. Signature glyph + color
                     matches the entity's faction so the player learns
-                    the species' signature move visually. */}
+                    the species' signature move visually.
+                    The RARITY chip + IV quality tag drive the addiction
+                    loop: GOD ROLL ascendeds glow gold, ROUGH commons read
+                    dim — the player learns to value each capture. */}
                 {(() => {
                   const ident = getEntityIdentity(deployedMinion.speciesId);
+                  const rarity = deployedMinion.rarity ?? 'common';
+                  const rMeta = RARITY_META[rarity];
+                  const ivTag = deployedMinion.ivs ? ivQualityTag(deployedMinion.ivs) : null;
+                  const dLvl = deployedMinion.dataLevel ?? deployedMinion.level;
                   return (
                     <View style={styles.identityRow}>
+                      <View style={[styles.idChip, { borderColor: rMeta.rim, backgroundColor: rMeta.bg }]}>
+                        <PixelText size={7} color={rMeta.rim} bold>
+                          {rMeta.label} · DLV{dLvl}
+                        </PixelText>
+                      </View>
+                      {ivTag && (
+                        <View style={[styles.idChip, { borderColor: ivTag.color }]}>
+                          <PixelText size={7} color={ivTag.color} bold>{ivTag.label}</PixelText>
+                        </View>
+                      )}
                       <View style={[styles.idChip, { borderColor: ident.signature.color }]}>
                         <PixelText size={7} color={ident.signature.color} bold>
                           {ident.signature.glyph} {ident.signature.name}
@@ -1355,11 +1402,30 @@ export default function CombatScreen() {
                       static
                     />
                   </View>
-                  <PixelText size={11} color={COLORS.neonYellow} bold>{m.name.toUpperCase()}</PixelText>
-                  <PixelText size={9} color={FACTIONS[k.faction].glowColor as any} bold>
+                  <PixelText size={11} color={COLORS.neonYellow} bold autoFit>{m.name.toUpperCase()}</PixelText>
+                  <PixelText size={9} color={FACTIONS[k.faction].glowColor as any} bold autoFit>
                     {ROLES[k.role].label}
                   </PixelText>
-                  <PixelText size={8} color={COLORS.textDim}>Lv{m.level} · T{m.tier}</PixelText>
+                  <PixelText size={8} color={COLORS.textDim} autoFit>
+                    Lv{m.level} · T{m.tier} · DLV{m.dataLevel ?? m.level}
+                  </PixelText>
+                  {/* ── RARITY + IV CHIP — drives addiction loop ── */}
+                  {(() => {
+                    const r = m.rarity ?? 'common';
+                    const rm = RARITY_META[r];
+                    return (
+                      <View style={{ flexDirection: 'row', gap: 3, marginTop: 2 }}>
+                        <View style={{ borderWidth: 1, borderColor: rm.rim, paddingHorizontal: 3, paddingVertical: 1, backgroundColor: rm.bg }}>
+                          <PixelText size={6} color={rm.rim} bold>{rm.label}</PixelText>
+                        </View>
+                        {m.ivs && (
+                          <View style={{ borderWidth: 1, borderColor: ivQualityTag(m.ivs).color, paddingHorizontal: 3, paddingVertical: 1 }}>
+                            <PixelText size={6} color={ivQualityTag(m.ivs).color} bold>{ivQualityTag(m.ivs).label}</PixelText>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })()}
                   {isAdvantage && (
                     <PixelText size={8} color={'#a0ff60'} bold>⚡ {matchupMult.toFixed(1)}×</PixelText>
                   )}

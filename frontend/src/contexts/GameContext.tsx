@@ -3,6 +3,7 @@ import { api } from '../utils/api';
 import { ITEMS, ABILITIES, xpForNextLevel } from '../data/gameData';
 import type { CapturedMinion } from '../systems/QuantumStorage';
 import { routeToStorage, summarizeRegistry } from '../systems/QuantumStorage';
+import { applyEntityXp, entityXpToNext } from '../data/entityProgression';
 
 export type GameState = {
   player: {
@@ -321,6 +322,53 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return { slot: routed.slot };
   };
 
+  // ─── ENTITY DATA LEVELING ──────────────────────────────────────────
+  // Grants independent DATA xp to a specific captured entity. Looks up
+  // the entity in party FIRST, then extendedStorage. Returns:
+  //   { leveled: boolean, gained: number, level: number }
+  // so combat can play sfx + log line for level-ups.
+  // Falls back gracefully for legacy minions without rarity (treats as common).
+  // ────────────────────────────────────────────────────────────────────
+  const awardEntityXp = (uid: string, amount: number): { leveled: boolean; gained: number; level: number } => {
+    if (!stateRef.current) return { leveled: false, gained: 0, level: 1 };
+    const next = { ...stateRef.current };
+    const q = ensureQuantum(next);
+    const apply = (m: CapturedMinion): { m: CapturedMinion; gained: number; leveled: boolean } => {
+      const rarity = m.rarity ?? 'common';
+      const lvl = m.dataLevel ?? m.level;
+      const xp = m.dataXp ?? 0;
+      const xpToNext = m.dataXpToNext ?? entityXpToNext(lvl);
+      const r = applyEntityXp({ level: lvl, xp, xpToNext, rarity, amount });
+      return {
+        m: { ...m, dataLevel: r.level, dataXp: r.xp, dataXpToNext: r.xpToNext, baseLevel: m.baseLevel ?? m.level },
+        gained: r.gained,
+        leveled: r.leveled,
+      };
+    };
+    let result = { leveled: false, gained: 0, level: 1 };
+    const inParty = q.party.findIndex((x) => x.uid === uid);
+    if (inParty >= 0) {
+      const r = apply(q.party[inParty]);
+      const party = [...q.party];
+      party[inParty] = r.m;
+      next.quantum = { ...q, party };
+      result = { leveled: r.leveled, gained: r.gained, level: r.m.dataLevel || 1 };
+    } else {
+      const inExt = q.extendedStorage.findIndex((x) => x.uid === uid);
+      if (inExt >= 0) {
+        const r = apply(q.extendedStorage[inExt]);
+        const extendedStorage = [...q.extendedStorage];
+        extendedStorage[inExt] = r.m;
+        next.quantum = { ...q, extendedStorage };
+        result = { leveled: r.leveled, gained: r.gained, level: r.m.dataLevel || 1 };
+      } else {
+        return result;
+      }
+    }
+    setState(next);
+    return result;
+  };
+
   const markSpeciesSeen = (speciesId: string) => {
     if (!stateRef.current || !speciesId) return;
     const next = { ...stateRef.current };
@@ -368,7 +416,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       loadFromServer, saveToServer, saveCheckpoint, restoreCheckpoint, createCharacter,
       applyDamage, applyHeal, applyMpCost,
       addItem, removeItem, addGold, awardXp, unlockAbility, unlockSynergyNode, equip, setPosition,
-      addCapturedMinion, markSpeciesSeen, swapPartyMinion, releaseMinion,
+      addCapturedMinion, awardEntityXp, markSpeciesSeen, swapPartyMinion, releaseMinion,
     }}>
       {children}
     </Ctx.Provider>

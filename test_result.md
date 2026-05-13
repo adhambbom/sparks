@@ -323,6 +323,70 @@ test_plan:
   test_priority: "high_first"
 
 backend_smoke:
+  - task: "Entity Progression fields — IVs, rarity, dataLevel/dataXp/dataXpToNext, baseLevel round-trip"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: |
+          ENTITY PROGRESSION FIELDS BACKEND REGRESSION — 13/13 PASS.
+
+          1) POST /api/auth/automation-bypass → 200, valid JWT issued
+             for playwright@nexus.test (token_len=213, httpOnly cookies set).
+
+          2) GET /api/character/me → 200, has_character=true,
+             player.name=PlaywrightRunner.
+
+          3) POST /api/game/save with state.quantum.party[0] containing
+             the FULL extended schema:
+               uid="test_x_1", speciesId="phreak_1", name="Phreak",
+               ivs={hp:31,atk:25,def:18,spd:22},
+               rarity="glitched",
+               dataLevel=5, dataXp=12, dataXpToNext=113, baseLevel=3
+             plus state.quantum.extendedStorage[0] with rarity="ascended",
+             ivs/dataLevel/baseLevel set. → 200 ok=true.
+             Echo body returned all new fields verbatim.
+
+          4) GET /api/character/me (round-trip after save) → 200.
+             ✅ party[0] preserved ALL 9 checks: uid, speciesId, name,
+                ivs.hp/atk/def/spd, rarity, dataLevel, dataXp, dataXpToNext,
+                baseLevel — exact match.
+             ✅ extendedStorage[0] preserved rarity="ascended",
+                ivs.atk=31, dataLevel=9, dataXp=88, dataXpToNext=200,
+                baseLevel=7 — exact match.
+
+          5) POST /api/game/save with LEGACY party entry (no ivs/rarity/
+             dataLevel/dataXp/dataXpToNext/baseLevel) → 200 ok=true.
+             Echo confirms NO new fields were injected by the backend
+             (extra_new_fields_injected=False). Subsequent GET
+             /api/character/me persisted the legacy entry cleanly.
+             ✅ Backwards compatible — GameStatePayload.state is
+             Dict[str,Any] so extra nested fields are neither required
+             nor rejected.
+
+          6) POST /api/game/checkpoint with the extended state → 200.
+             Subsequent GET /api/character/me checkpoint.quantum.party
+             preserves rarity="glitched", dataLevel=5, ivs.hp=31,
+             baseLevel=3. ✅ Checkpoint round-trip preserves new fields.
+
+          7) GET /api/ → 200, body={"message":"Synthetic Sparks API",
+             "version":"1.0"}.
+             GET /api/game/leaderboard → 200, 4 entries.
+
+          CONCLUSION: New optional entity-progression fields (ivs,
+          rarity, dataLevel, dataXp, dataXpToNext, baseLevel) on
+          state.quantum.party[] and state.quantum.extendedStorage[]
+          persist correctly through both /api/game/save and
+          /api/game/checkpoint round-trips. Legacy saves without the
+          new fields still succeed (no schema rejection, no field
+          injection). No other /api/* endpoints regressed. No code
+          changes made by tester.
+
   - task: "Operator Synergy Framework — persistence via /api/game/save with synergyNodes/synergyPoints"
     implemented: true
     working: true
