@@ -495,3 +495,117 @@ agent_communication:
         → walk south & east to traverse the corrupted hotspots and
           see the warning signs, car wreck, terminals, etc.
 
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  VISUAL COHERENCE PASS — Faction System + UnifiedSprite       ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Tackled the user's "sprites look like they're from different games"
+      complaint head-on. NO new art generation (LLM key still exhausted).
+      Strategy was render-time normalization + strict single-source-of-
+      truth so the same enemyId reads as the same entity everywhere.
+
+      1) FACTION SYSTEM — /app/frontend/src/data/factions.ts
+         Locked rules for SEVEN visual identities:
+           🟣 corrupted_ai     — purple rim glow, jittery bob
+           🔵 industrial_bot   — cyan glow, slow heavy bob
+           🔴 cyber_mutant     — red glow, twitchy 3hz aggression
+           🟡 rogue_military   — amber glow, disciplined 1.6hz march
+           💚 player           — friendly cyan-green halo (anchor)
+           ⚪ npc_friendly     — warm amber, steady allies
+           💗 boss             — magenta corona, apocalyptic size
+         Each faction has LOCKED values for: glowColor / innerGlow /
+         outlineColor / saturation / contrast / brightness / hueRotate /
+         bob frequency + amplitude / style note. Every new sprite must
+         respect these rules — living art-direction file.
+
+         ENEMY_FACTION{} maps every known enemyId → faction so we have a
+         single canonical lookup. Unknown ids default to corrupted_ai.
+
+      2) ENEMY VISUAL — SINGLE SOURCE OF TRUTH
+         /app/frontend/src/systems/enemyVisual.ts
+         getEnemyVisual(enemyId) is now the ONE function both
+         game.tsx (overworld) AND combat.tsx (battle) call to resolve:
+           • uri (PNG)
+           • faction (with all rendering rules)
+           • scale (TIER_SCALE table — boss/elite always larger)
+           • tier / isBoss flags
+         Resolution order: HARD_OVERRIDE → quantum-minion atlas →
+         tier-fallback. Boss enemies are auto-promoted to the 'boss'
+         faction so their unique magenta corona overrides their base
+         family.
+
+      3) UNIFIED SPRITE COMPONENT
+         /app/frontend/src/components/UnifiedSprite.tsx
+         A single render component that applies:
+           • Faction rim-glow (box-shadow on web, shadow* on native)
+           • Faction inner halo behind the sprite
+           • CSS filter normalization on web:
+               saturate(faction.saturation)
+               contrast(faction.contrast)
+               brightness(faction.brightness)
+               hue-rotate(faction.hueRotate)
+           • 4-direction drop-shadow outline (1px black) → uniform
+             readable silhouettes even when source PNGs differ.
+           • Idle bob driven by the parent's anim tick — frequency &
+             amplitude tuned per faction so each family moves differently.
+           • Optional `combat` mode → bigger glow + faint scanline
+             overlay so battle sprites read as "zoomed-in versions"
+             of the overworld creature, not different art.
+           • Optional `static` mode for thumbnails / portraits.
+
+      4) WIRED EVERYWHERE
+         game.tsx:
+           • Roamers now use UnifiedSprite — same enemyId → same uri
+             + same faction glow as combat.
+           • NPCs (Orion, Jax, Lyra) wrapped in UnifiedSprite with
+             the npc_friendly faction (warm amber halo).
+           • Player chibi gets a subtle player-faction halo under
+             the feet (cyan-green) so it's part of the same world
+             art system without changing the source sprite.
+         combat.tsx:
+           • Enemy slot replaced with UnifiedSprite(combat=true).
+           • Player/Deployed-minion slot replaced with UnifiedSprite.
+           • Deploy-picker thumbnails replaced with UnifiedSprite
+             (static) so the captured minion thumb matches its
+             overworld + combat look.
+         cyber-kit.tsx:
+           • Added a FACTION SAMPLER section so the user / future
+             agents can see all 6 family glows at a glance.
+
+      5) VISUAL VERIFICATION
+         Cyber-kit showcase confirmed:
+           🟣 Corrupted-AI drone glows purple
+           🔵 Industrial mech glows cyan
+           🔴 Mutant tentacle glows red
+           🟡 Military juggernaut glows amber
+           💚 Player chibi glows soft cyan-green
+           💗 Elite mech glows magenta
+         /game integration confirmed:
+           • The phreak_1 roamer (corrupted_ai) wears a clear
+             purple halo in the overworld.
+           • NPCs Orion/Jax/Lyra wear warm amber halos that
+             unify them with the rest of the world art.
+           • Atmosphere stack still working over the top.
+
+      WHAT THIS SOLVES
+        ✅ Same enemyId = same source PNG in overworld and combat.
+        ✅ Combat = "zoomed-in" overworld creature, not a redesign.
+        ✅ Faction glow language gives instant family recognition.
+        ✅ AI-art saturation drift normalized by CSS filters.
+        ✅ Silhouettes unified by uniform drop-shadow outlines.
+        ✅ Different motion personalities per faction (jittery /
+           heavy / twitchy / disciplined).
+        ✅ Living art-direction file every new sprite must reference.
+
+      WHAT'S STILL ON THE BACKLOG
+        - Re-rendering all NPC portraits / icons through UnifiedSprite
+          in /inventory, /skills, /store screens (low priority).
+        - 3 missing v3 minion sprites (mech_2/3/4).
+        - Locked treasure chest mechanic.
+        - game.tsx refactor (>1300 lines).
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+      Live preview confirmed working on mobile viewport (390×844).
+

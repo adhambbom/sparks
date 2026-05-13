@@ -14,6 +14,9 @@ import { PixelText } from '../src/components/PixelText';
 import CyberTile, { CyberTileKind } from '../src/components/cyber/CyberTile';
 import CyberProp, { CyberPropKind } from '../src/components/cyber/CyberProp';
 import { AtmosphereLayer } from '../src/components/AtmosphereLayer';
+import UnifiedSprite from '../src/components/UnifiedSprite';
+import { FACTIONS, FactionId } from '../src/data/factions';
+import { SPRITE_ASSETS } from '../src/data/gameData';
 
 const TILE_KINDS: { id: CyberTileKind; label: string }[] = [
   { id: 'pavement', label: 'PAVEMENT' },
@@ -51,6 +54,38 @@ export default function CyberKitShowcase() {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 60 }}>
+        {/* ── FACTION GLOW SAMPLER — visual coherence check ───────── */}
+        <Section title="FACTION SAMPLER (same sprite, different glow)">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-around' }}>
+            {([
+              { fid: 'corrupted_ai',  uri: SPRITE_ASSETS.cyDroneSpike,     label: 'CORRUPTED AI' },
+              { fid: 'industrial_bot', uri: SPRITE_ASSETS.cyMechTitan,     label: 'INDUSTRIAL' },
+              { fid: 'cyber_mutant',  uri: SPRITE_ASSETS.cyTentacleCaster, label: 'MUTANT' },
+              { fid: 'rogue_military', uri: SPRITE_ASSETS.enemyJuggernaut, label: 'MILITARY' },
+              { fid: 'player',        uri: SPRITE_ASSETS.player,           label: 'PLAYER' },
+              { fid: 'boss',          uri: SPRITE_ASSETS.cyMechTitan,      label: 'ELITE' },
+            ] as { fid: FactionId; uri: string; label: string }[]).map((f) => (
+              <View key={f.fid} style={{ alignItems: 'center', margin: 8 }}>
+                <UnifiedSprite
+                  uri={f.uri}
+                  faction={FACTIONS[f.fid]}
+                  size={70}
+                  static
+                />
+                <PixelText size={8} color={FACTIONS[f.fid].glowColor as any} style={{ marginTop: 4 }}>
+                  {f.label}
+                </PixelText>
+                <PixelText size={7} color={'#777'} style={{ marginTop: 1, maxWidth: 70, textAlign: 'center' }}>
+                  {FACTIONS[f.fid].style}
+                </PixelText>
+              </View>
+            ))}
+          </View>
+          <PixelText size={9} color={'#9090b0'} style={{ marginTop: 8, textAlign: 'center' }}>
+            ↑ Each faction has locked glow / filter / motion rules ↑
+          </PixelText>
+        </Section>
+
         {/* ── DEMO STREET — composed scene from primitives ─────────── */}
         <Section title="LIVE DEMO STREET">
           <View style={[styles.demoStreet, { width: TILE_SIZE * 8 }]}>

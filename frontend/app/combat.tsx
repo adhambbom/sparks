@@ -22,6 +22,9 @@ import {
 import { executeMinionSkill, getMinionSkillView } from '../src/systems/TamedCombat';
 import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicMinionRenderer';
 import { ENEMIES as _ENEMIES } from '../src/data/gameData';
+import { getEnemyVisual } from '../src/systems/enemyVisual';
+import UnifiedSprite from '../src/components/UnifiedSprite';
+import { FACTIONS } from '../src/data/factions';
 
 /** Resolve the *deployed minion* sprite uri:
  *  1. Prefer the per-variant Quantum-Minion sheet (phreak/vrghost/mech) if mapped.
@@ -601,17 +604,28 @@ export default function CombatScreen() {
                 zIndex: 10,
               }}
             >
-              <View style={[
-                styles.enemySpriteBox,
-                isBoss && styles.enemySpriteBoxBoss,
-                { width: isBoss ? 170 : 150, height: isBoss ? 170 : 150 },
-              ]}>
-                <Image
-                  source={{ uri: getEnemySpriteUri(bossFromRoute, enemyData) }}
-                  style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
-                  resizeMode="contain"
-                />
-              </View>
+              {(() => {
+                // SAME source-of-truth resolver as the overworld → same
+                // enemyId renders the SAME sprite, just larger + with the
+                // combat scanline overlay so it reads as a zoomed-in view.
+                const visual = getEnemyVisual(enemyData.id || '', { forceBoss: bossFromRoute || !!enemyData.isBoss });
+                const boxW = isBoss ? 170 : 150;
+                return (
+                  <View style={[
+                    styles.enemySpriteBox,
+                    isBoss && styles.enemySpriteBoxBoss,
+                    { width: boxW, height: boxW, alignItems: 'center', justifyContent: 'center' },
+                  ]}>
+                    <UnifiedSprite
+                      uri={visual.uri}
+                      faction={visual.faction}
+                      size={boxW - 10}
+                      tick={animTick}
+                      combat
+                    />
+                  </View>
+                );
+              })()}
             </Animated.View>
             {/* Floaters anchored above the enemy sprite */}
             <View style={styles.floaterEAnchor} pointerEvents="none">
@@ -640,23 +654,37 @@ export default function CombatScreen() {
                 height: deployedMinion ? 180 : 175,
                 transform: [{ translateY: Math.sin(animTick * 0.35 + Math.PI) * 2.5 }],
                 zIndex: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              {/* Dynamic source: minion sprite if deployed, otherwise the player.
-                  `resolveDeployedMinionUri` falls back through Quantum sheet →
-                  enemy atlas → null so any captured species swaps the slot. */}
-              <Image
-                source={{
-                  uri: (deployedMinion && resolveDeployedMinionUri(deployedMinion.speciesId)) ||
-                       SPRITE_ASSETS.player,
-                }}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  backgroundColor: 'transparent',
-                }}
-                resizeMode="contain"
-              />
+              {(() => {
+                // Player slot: same unified-sprite pipeline so the cyan
+                // friendly halo matches every other character in the world.
+                // Deployed minion: use enemyVisual to keep its faction
+                // identity consistent with the overworld + enemy view.
+                if (deployedMinion) {
+                  const mv = getEnemyVisual(deployedMinion.speciesId);
+                  return (
+                    <UnifiedSprite
+                      uri={mv.uri}
+                      faction={mv.faction}
+                      size={150}
+                      tick={animTick}
+                      combat
+                    />
+                  );
+                }
+                return (
+                  <UnifiedSprite
+                    uri={SPRITE_ASSETS.player}
+                    faction={FACTIONS.player}
+                    size={140}
+                    tick={animTick}
+                    combat={false}
+                  />
+                );
+              })()}
             </Animated.View>
             {shield && <View style={[styles.playerShielded, { width: 140, height: 185 }]} pointerEvents="none" />}
           </View>
@@ -795,8 +823,9 @@ export default function CombatScreen() {
         {panel === 'minionDeploy' && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
             {(state.quantum?.party ?? []).map((m) => {
-              // Dynamic sprite thumb so the player sees the exact captured variant.
-              const thumb = hasMinionSprite(m.speciesId) ? resolveMinionSpriteUri(m.speciesId) : null;
+              // Use the same enemy-visual resolver so each minion's thumb
+              // matches what it looks like in combat + overworld.
+              const mv = getEnemyVisual(m.speciesId);
               return (
                 <TouchableOpacity
                   key={m.uid}
@@ -804,13 +833,14 @@ export default function CombatScreen() {
                   onPress={() => playerDeployMinion(m)}
                   testID={`combat-deploy-${m.uid}`}
                 >
-                  {thumb ? (
-                    <Image
-                      source={{ uri: thumb }}
-                      style={{ width: 44, height: 44, marginBottom: 2 }}
-                      resizeMode="contain"
+                  <View style={{ width: 50, height: 50, marginBottom: 2, alignItems: 'center', justifyContent: 'center' }}>
+                    <UnifiedSprite
+                      uri={mv.uri}
+                      faction={mv.faction}
+                      size={50}
+                      static
                     />
-                  ) : null}
+                  </View>
                   <PixelText size={11} color={COLORS.neonYellow} bold>{m.name.toUpperCase()}</PixelText>
                   <PixelText size={9} color={COLORS.textDim}>Lv{m.level} · T{m.tier}</PixelText>
                   <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>ATK {m.atk} · {m.skills.length} skills</PixelText>

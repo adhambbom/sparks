@@ -31,6 +31,9 @@ import { useTutorial } from '../src/contexts/TutorialContext';
 import { sfx } from '../src/utils/audio';
 import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicMinionRenderer';
 import { stepWildAI, makeAIRoamer, AIRoamer, AI_CONFIG } from '../src/systems/WildMinionAI';
+import { getEnemyVisual } from '../src/systems/enemyVisual';
+import UnifiedSprite from '../src/components/UnifiedSprite';
+import { FACTIONS } from '../src/data/factions';
 
 const TILE = 38;
 const SPEED = 12; // pixels per frame (was 9 → another +33% on the overworld walk)
@@ -850,6 +853,7 @@ export default function GameScreen() {
               id === 'npc_lyra' ? SPRITE_ASSETS.npcLyra : null;
             const W = TILE * 1.4;
             const H = TILE * 1.9;
+            const npcFaction = FACTIONS.npc_friendly;
             return (
               <View
                 key={id}
@@ -868,10 +872,11 @@ export default function GameScreen() {
                 pointerEvents="none"
               >
                 {npcSprite ? (
-                  <Image
-                    source={{ uri: npcSprite }}
-                    style={{ width: W, height: H, backgroundColor: 'transparent' }}
-                    resizeMode="contain"
+                  <UnifiedSprite
+                    uri={npcSprite}
+                    faction={npcFaction}
+                    size={W}
+                    tick={animTick + id.charCodeAt(id.length - 1)}
                   />
                 ) : (
                   <View style={styles.npcSprite}>
@@ -890,29 +895,16 @@ export default function GameScreen() {
               and a mech mini-boss. The sprite is resolved dynamically per-roamer
               so each species shows its own art in the overworld.  */}
           {roamers.map((r) => {
-            const isBoss = r.boss;
-            // Sprite priority for the Forgotten Block district:
-            //   1) Cyber-pack override (cohesive ruined-AI aesthetic)
-            //   2) Quantum-Minion sheet (if mapped)
-            //   3) Default scout/juggernaut silhouettes
-            let spriteUri: string;
-            const packKey = ENEMY_PACK_OVERRIDE[r.enemyId];
-            if (packKey && (SPRITE_ASSETS as any)[packKey]) {
-              spriteUri = (SPRITE_ASSETS as any)[packKey];
-            } else if (hasMinionSprite(r.enemyId)) {
-              spriteUri = resolveMinionSpriteUri(r.enemyId) || SPRITE_ASSETS.enemyScout;
-            } else {
-              spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
-            }
-            // Pokemon-Emerald-style scale: enemies are ~1 tile (scout) / ~1.3 tile (boss).
-            const W = isBoss ? TILE * 1.30 : TILE * 1.05;
-            const H = isBoss ? TILE * 1.30 : TILE * 1.05;
+            // Single source of truth: same enemyId → same sprite + faction
+            // in overworld and combat. The cyber-pack override and faction
+            // resolution live entirely inside getEnemyVisual().
+            const visual = getEnemyVisual(r.enemyId, { forceBoss: !!r.boss });
+            const W = TILE * 1.15 * visual.scale;
+            const H = W;
             // Per-roamer phase based on uid + animTick → asynchronous gait
             const uidHash = r.uid.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
             const tickPhase = animTick + uidHash;
             const swingPhase = tickPhase * 0.6;
-            const bob = Math.abs(Math.sin(swingPhase)) * (isBoss ? 1.5 : 2);
-            const sway = Math.sin(swingPhase * 0.5) * (isBoss ? 1.5 : 3);
             return (
               <View
                 key={r.uid}
@@ -922,23 +914,17 @@ export default function GameScreen() {
                   top: r.y * TILE + (TILE - H) / 2 - 4,
                   width: W,
                   height: H,
-                  zIndex: isBoss ? 6 : 5,
-                  transform: [
-                    { translateY: -bob },
-                    { rotate: `${sway}deg` },
-                  ],
+                  zIndex: visual.isBoss ? 6 : 5,
                 }}
                 pointerEvents="none"
               >
-                <Image
-                  source={{ uri: spriteUri }}
-                  style={{ width: W, height: H, backgroundColor: 'transparent' }}
-                  resizeMode="contain"
+                <UnifiedSprite
+                  uri={visual.uri}
+                  faction={visual.faction}
+                  size={W}
+                  tick={animTick + uidHash}
                 />
-                {/* WildMinionAI "!" alert icon — pixel-style exclamation that
-                    sits above the sprite head whenever the roamer has spotted
-                    the player and is on the hunt. Bounces with a 2hz pulse
-                    so it draws the eye without being noisy. */}
+                {/* WildMinionAI "!" alert icon */}
                 {(r.state === 'Chasing' || r.state === 'Alerted') && (
                   <View
                     pointerEvents="none"
@@ -950,7 +936,7 @@ export default function GameScreen() {
                       height: 18,
                       backgroundColor: '#1a0a0a',
                       borderWidth: 1.5,
-                      borderColor: '#ff2222',
+                      borderColor: visual.faction.glowColor,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
@@ -973,6 +959,7 @@ export default function GameScreen() {
             // proportioned (~1×1 tile + a smidge of headroom).
             const SIZE = TILE * 1.55;
             const isMoving = dirRef.current.x !== 0 || dirRef.current.y !== 0;
+            const playerFaction = FACTIONS.player;
             return (
               <View
                 style={{
@@ -987,6 +974,29 @@ export default function GameScreen() {
                 }}
                 pointerEvents="none"
               >
+                {/* Friendly player halo — absolutely positioned so it never
+                    pushes the SheetSprite out of place. Sits just under the
+                    chibi's feet. */}
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    bottom: SIZE * 0.08,
+                    left: SIZE * 0.125,
+                    width: SIZE * 0.75,
+                    height: SIZE * 0.18,
+                    borderRadius: SIZE * 0.5,
+                    backgroundColor: playerFaction.innerGlow,
+                    ...(Platform.OS === 'web'
+                      ? { boxShadow: `0 0 20px 4px ${playerFaction.innerGlow}` } as any
+                      : {
+                          shadowColor: playerFaction.glowColor,
+                          shadowOpacity: 0.6,
+                          shadowRadius: 12,
+                          shadowOffset: { width: 0, height: 0 },
+                        }),
+                  }}
+                />
                 <SheetSprite
                   sheet="adhamb"
                   dir={facingRef.current}
