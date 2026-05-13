@@ -379,7 +379,45 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      Phase B: OPERATOR SYNERGY FRAMEWORK shipped.
+      SYNERGY GRID v2 — Cyber Identity + Visual Progression Pass.
+
+      Data layer rewrite (src/data/operatorSynergy.ts):
+        • 20 nodes renamed to illegal AI-engineering terminology:
+          HANDSHAKE / NULL CALL / FAST REBOOT / HIVE LINK
+          NULL SHIELD / PROXY ABSORB / BIO-LATCH / HOT-PATCH
+          STACK PUSH / CORE LEAK / SIGNAL BLEED / SIGNATURE+
+          STACK INJECT / BIO-LEECH / GLITCH FIELD / FULL PURGE
+          THREAD SPLIT / MIRROR-PING / EXECUTE CHAIN / GHOST GRID
+        • Each node has a `flavor` (eerie 1-liner) + `rarity`
+          (common/rare/illegal/mythic) which drives visual weight.
+        • Branches now expose `rimColor` + `glyph` for iconic identity.
+
+      Screen rewrite (app/operator-framework.tsx):
+        • Deterministic absolute layout — 4 tiers × N columns.
+        • SVG connecting lines between prereq → child nodes.
+          When BOTH are owned: solid glowing branch-color line.
+          Otherwise: dashed dim line.
+        • Owned nodes pulse (Animated ring scaled by rarity tier:
+          common=0, rare=1, illegal=1, mythic=2× ring intensity).
+        • Each card carries a rarity tag chip + tier label + LINK
+          marker for prereq nodes.
+        • Branch tabs show glyph + label + pip counter (owned in
+          branch). Active tab gets shadowed glow halo in rim color.
+        • Inspector panel themed by rarity rim color, with structured
+          flavor + ▸ effect breakdown. "JACK IN" replaces "UNLOCK".
+
+      Combat (app/combat.tsx):
+        • Active SYNERGY STRIP above the 3×2 action grid. Shows
+          short tags (OC / SHLD / SPRD / FIELD / CHAIN / HOT-PATCH)
+          + live corruption stack counter (CORR×N). Glanceable
+          status clarity so the player sees their illegal mods at work
+          without reading the log.
+
+      No backend / API changes (synergy persistence already verified
+      9/9 in previous run).
+
+      ASK FOR BACKEND TEST: only quick smoke (no schema changes).
+      Frontend UX needs visual user verification.
 
       • NEW data file: src/data/operatorSynergy.ts — 20 nodes across
         5 branches (DEPLOYMENT, STABILITY, OVERCLOCK, CORRUPTION,

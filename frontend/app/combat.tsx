@@ -25,7 +25,7 @@ import { ENEMIES as _ENEMIES } from '../src/data/gameData';
 import { getEnemyVisual } from '../src/systems/enemyVisual';
 import UnifiedSprite from '../src/components/UnifiedSprite';
 import { FACTIONS, FactionId } from '../src/data/factions';
-import { computeSynergy } from '../src/data/operatorSynergy';
+import { computeSynergy, summarizeActiveSynergy } from '../src/data/operatorSynergy';
 import {
   combatMultiplier,
   classifyEffectiveness,
@@ -1139,7 +1139,30 @@ export default function CombatScreen() {
         )}
 
         {turn === 'player' && !busy && panel === 'main' && (
-          <View style={styles.actionGrid}>
+          <>
+            {/* ── ACTIVE SYNERGY STRIP — operator passives currently online ─
+                Glanceable tags + corruption-stack counter so the player
+                sees their illegal mods working without reading the log. */}
+            {(() => {
+              const tags = summarizeActiveSynergy(state?.player.synergyNodes, !!deployedMinion);
+              if (tags.length === 0 && corruptionTurns === 0) return null;
+              return (
+                <View style={styles.synergyStrip}>
+                  <PixelText size={7} color={COLORS.textDim}>SYNERGY ▸ </PixelText>
+                  {tags.map((t) => (
+                    <View key={t} style={styles.synergyChip}>
+                      <PixelText size={7} color={'#c46cff'} bold>{t}</PixelText>
+                    </View>
+                  ))}
+                  {corruptionTurns > 0 && (
+                    <View style={[styles.synergyChip, { borderColor: '#c46cff', backgroundColor: 'rgba(60,20,80,0.55)' }]}>
+                      <PixelText size={7} color={'#ffc1ff'} bold>CORR×{corruptionTurns}</PixelText>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+            <View style={styles.actionGrid}>
             <View style={styles.actionCell}>
               <PixelButton title="STRIKE" onPress={playerAttack} color={COLORS.neonRed} testID="combat-attack" full size="sm" />
             </View>
@@ -1174,6 +1197,7 @@ export default function CombatScreen() {
               <PixelButton title="ESCAPE" onPress={playerRun} color={COLORS.textDim} testID="combat-run" full size="sm" />
             </View>
           </View>
+          </>
         )}
 
         {/* ── QUARANTINE spike picker ─────────────────────────────────── */}
@@ -1754,6 +1778,23 @@ const styles = StyleSheet.create({
     flexBasis: '32%',
   },
   skillsRow: { gap: 8, paddingVertical: 6 },
+  // ── Synergy strip — shows active operator passives next to corruption stack count.
+  synergyStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    gap: 4,
+    marginBottom: 4,
+  },
+  synergyChip: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#c46cff',
+    backgroundColor: 'rgba(40,15,70,0.55)',
+  },
   skillBtn: {
     backgroundColor: 'rgba(10,10,20,0.9)',
     borderWidth: 2, padding: 10,
