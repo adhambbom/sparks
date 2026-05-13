@@ -26,6 +26,7 @@ import { getEnemyVisual } from '../src/systems/enemyVisual';
 import UnifiedSprite from '../src/components/UnifiedSprite';
 import { FACTIONS, FactionId } from '../src/data/factions';
 import { computeSynergy, summarizeActiveSynergy } from '../src/data/operatorSynergy';
+import { getEntityIdentity, SIGNATURE_BY_FACTION } from '../src/data/entitySignatures';
 import {
   combatMultiplier,
   classifyEffectiveness,
@@ -159,6 +160,13 @@ export default function CombatScreen() {
   // Corruption stacks applied to the enemy via CORRUPTION branch nodes.
   // Stored as remaining turns; per-turn damage drawn from synergy.corruptionDpt.
   const [corruptionTurns, setCorruptionTurns] = useState(0);
+  // ── ENTITY TRAIT RUNTIME STATE ─────────────────────────────────────
+  // Tracks "first action since deploy" for STRIKER's FIRST STRIKE trait,
+  // "first skill this fight" for ARTILLERY's BACKLOAD, and the SUPPORT
+  // RELAY tick counter. Reset on each new deployment.
+  const [traitFirstAttackUsed, setTraitFirstAttackUsed] = useState(false);
+  const [traitFirstSkillUsed, setTraitFirstSkillUsed] = useState(false);
+  const [traitRelayTick, setTraitRelayTick] = useState(0);
 
   // ── ACTIVE STATUS EFFECTS ─────────────────────────────────────────
   // Lists of currently-applied STATUSES on enemy / player. Each entry
@@ -298,6 +306,24 @@ export default function CombatScreen() {
     if (deployedMinion && synergy.entityCritChance > 0 && Math.random() < 0.20) {
       dmg = Math.floor(dmg * 1.5);
       crit = true;
+    }
+    // ── ENTITY TRAIT: FIRST STRIKE (striker role) ─────────────────
+    // First entity attack after deploy lands +25% damage.
+    if (deployedMinion && !traitFirstAttackUsed) {
+      const ident = getEntityIdentity(deployedMinion.speciesId);
+      if (ident.role === 'striker') {
+        dmg = Math.floor(dmg * 1.25);
+        pushLog(`▲ FIRST STRIKE primed — ${deployedMinion.name} fires hot.`);
+      }
+      setTraitFirstAttackUsed(true);
+    }
+    // ── ENTITY TRAIT: JAMMER (disruptor role) — 20% defense_down ──
+    if (deployedMinion) {
+      const ident = getEntityIdentity(deployedMinion.speciesId);
+      if (ident.role === 'disruptor' && Math.random() < 0.20) {
+        setEnemyDefDebuff((d) => Math.max(d, 2));
+        showFloater('JAMMED', '#c46cff', 'e');
+      }
     }
     setEnemyHp((hp) => Math.max(0, hp - dmg));
     showFloater(`-${dmg}`, COLORS.neonYellow, 'e');
@@ -506,6 +532,10 @@ export default function CombatScreen() {
     setMinionMaxHp(scaledHp);
     setFallbackPrompt(false);
     setDeployedMinion(minion);
+    // ── Reset per-deploy trait counters ──
+    setTraitFirstAttackUsed(false);
+    setTraitFirstSkillUsed(false);
+    setTraitRelayTick(0);
     // ── OPERATOR SYNERGY: PRIORITY (slot bonus next turn) ──────────
     // No state needed yet — combat's existing fast-priority is implicit.
     // The PRIORITY node simply guarantees the entity acts first which the
@@ -545,7 +575,22 @@ export default function CombatScreen() {
     const { mult: typeMult, crit, tier } = combatMultiplier(
       kit.faction, enemyFaction, ROLES[kit.role].critBonus,
     );
-    const finalDmg = Math.max(1, Math.floor(result.damage * typeMult));
+    let finalDmg = Math.max(1, Math.floor(result.damage * typeMult));
+    // ── ENTITY TRAIT: BACKLOAD (artillery) — first skill +50% ───
+    const ident = getEntityIdentity(deployedMinion.speciesId);
+    if (ident.role === 'artillery' && !traitFirstSkillUsed) {
+      finalDmg = Math.floor(finalDmg * 1.5);
+      pushLog(`⌬ BACKLOAD discharges — capacitors empty.`);
+      setTraitFirstSkillUsed(true);
+    }
+    // ── SYNERGY: SIGNATURE+ (mythic) — slot-4 / signature: +35% ─
+    // The signature move id is stored on SIGNATURE_BY_FACTION. When
+    // the player triggers the signature, apply the mythic bonus.
+    const sigId = SIGNATURE_BY_FACTION[kit.faction]?.id;
+    if (synergy.entitySignatureBonus > 0 && skillId === sigId) {
+      finalDmg = Math.floor(finalDmg * (1 + synergy.entitySignatureBonus));
+      showFloater('SIG+', '#ffd24a', 'e');
+    }
     // Damage application — uses the SAME pipeline as the existing playerAttack:
     // mutate enemy HP via setEnemyHp + floater + shake. No engine changes.
     setEnemyHp((hp) => Math.max(0, hp - finalDmg));
@@ -695,6 +740,11 @@ export default function CombatScreen() {
           1,
           Math.round(dmg * (1 + synergy.entityDmgTakenMod)),
         );
+        // ── ENTITY TRAIT: PLATING (tank) — flat −5 dmg ──────────
+        const ident = getEntityIdentity(deployedMinion.speciesId);
+        if (ident.role === 'tank') {
+          absorbedDmg = Math.max(1, absorbedDmg - 5);
+        }
         // OPERATOR ABSORB: 15% of entity damage routes to the operator.
         const operatorShare = synergy.operatorAbsorbPct > 0
           ? Math.max(1, Math.round(absorbedDmg * synergy.operatorAbsorbPct))
@@ -1094,6 +1144,27 @@ export default function CombatScreen() {
                 <PixelText size={11} color={COLORS.neonYellow} bold autoFit>DEPLOYED ENTITY</PixelText>
                 <View style={{ height: 4 }} />
                 <PixelText size={12} color={COLORS.neonMagenta} bold autoFit>{deployedMinion.name.toUpperCase()}</PixelText>
+                {/* ── SIGNATURE + TRAIT CHIPS ─────────────────────────
+                    Glanceable identity strip. Signature glyph + color
+                    matches the entity's faction so the player learns
+                    the species' signature move visually. */}
+                {(() => {
+                  const ident = getEntityIdentity(deployedMinion.speciesId);
+                  return (
+                    <View style={styles.identityRow}>
+                      <View style={[styles.idChip, { borderColor: ident.signature.color }]}>
+                        <PixelText size={7} color={ident.signature.color} bold>
+                          {ident.signature.glyph} {ident.signature.name}
+                        </PixelText>
+                      </View>
+                      <View style={[styles.idChip, { borderColor: ident.trait.color, backgroundColor: 'rgba(20,30,40,0.55)' }]}>
+                        <PixelText size={7} color={ident.trait.color} bold>
+                          {ident.trait.glyph} {ident.trait.name}
+                        </PixelText>
+                      </View>
+                    </View>
+                  );
+                })()}
                 {/* STABILITY bar — visible HP gauge so the player can see when
                     the entity is about to disconnect. This is the core tactical
                     feedback for the entity-tank mechanic. */}
@@ -1313,10 +1384,15 @@ export default function CombatScreen() {
             minion is acting, mirroring classic Pokémon move-select state. */}
         {panel === 'minionSkills' && deployedMinion && (() => {
           // Order of slots always follows the canonical 4-move tier ladder so
-          // slot index → keyboard "1.MALWARE 2.DDOS 3.TROJAN 4.SYSTEM" matches
+          // slot index → keyboard "1.MALWARE 2.DDOS 3.TROJAN 4.SIGNATURE" matches
           // the mockup regardless of which subset this minion actually knows.
-          const allSlots: string[] = ['data_leak', 'ddos_overload', 'firewall_spike', 'packet_storm'];
-          const known = new Set(deployedMinion.skills);
+          // The TIER-4 slot is now species-flavored: it's the entity's faction
+          // SIGNATURE MOVE (MIND CRACK / PHASE STRIDE / ARMOR LOCK / RAIL VOLLEY).
+          const sigForDeployed = SIGNATURE_BY_FACTION[getSpeciesKit(deployedMinion.speciesId).faction];
+          const allSlots: string[] = ['data_leak', 'ddos_overload', 'firewall_spike', sigForDeployed.id];
+          // Always treat the signature as KNOWN for the deployed entity —
+          // each entity ships with its faction's signature unlocked.
+          const known = new Set([...deployedMinion.skills, sigForDeployed.id]);
           // Live diagnostics derived from runtime state:
           const integrityPct = Math.round((player.hp / Math.max(1, player.maxHp)) * 100);
           const coreTemp =
@@ -1794,6 +1870,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#c46cff',
     backgroundColor: 'rgba(40,15,70,0.55)',
+  },
+  // ── Identity row — signature + trait chips under deployed entity name.
+  identityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
+  idChip: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderWidth: 1,
+    backgroundColor: 'rgba(10,10,20,0.65)',
   },
   skillBtn: {
     backgroundColor: 'rgba(10,10,20,0.9)',

@@ -59,6 +59,39 @@ export const MINION_SKILLS: Record<string, MinionSkill> = {
     statusTurns: 2,
     desc: 'Burst flood — 150% atk + light burn.',
   },
+  // ── FACTION SIGNATURE MOVES (slot-4 replaces packet_storm for deployed entities) ──
+  // Mirrors src/data/entitySignatures.ts so executeMinionSkill resolves
+  // these via the same record without circular imports.
+  sig_mind_crack: {
+    id: 'sig_mind_crack',
+    name: 'MIND CRACK',
+    power: 1.55,
+    status: 'stun',
+    statusTurns: 1,
+    desc: 'Corrupted thought-loop — 155% atk; target stutters.',
+  },
+  sig_phase_stride: {
+    id: 'sig_phase_stride',
+    name: 'PHASE STRIDE',
+    power: 1.50,
+    status: 'burn',
+    statusTurns: 2,
+    desc: 'Slip frames — 150% atk + cross-timeline bleed.',
+  },
+  sig_armor_lock: {
+    id: 'sig_armor_lock',
+    name: 'ARMOR LOCK',
+    power: 1.45,
+    status: 'defense_down',
+    statusTurns: 3,
+    desc: 'Forced repair cycle — 145% atk; target staggers (DEF↓).',
+  },
+  sig_rail_volley: {
+    id: 'sig_rail_volley',
+    name: 'RAIL VOLLEY',
+    power: 1.70,
+    desc: 'Pure kinetic discharge — 170% atk. No status, raw payload.',
+  },
 };
 
 /**

@@ -379,7 +379,45 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      SYNERGY GRID v2 — Cyber Identity + Visual Progression Pass.
+      SIGNATURE ENTITY IDENTITIES shipped.
+
+      New data file: src/data/entitySignatures.ts
+        • 5 SIGNATURE MOVES (one per faction):
+            corrupted_ai  → MIND CRACK (155% atk + stun)
+            cyber_mutant  → PHASE STRIDE (150% atk + 2-turn burn)
+            industrial_bot→ ARMOR LOCK (145% atk + 3-turn def-down)
+            rogue_military→ RAIL VOLLEY (170% atk pure payload)
+            player        → OPERATOR STRIKE (fallback)
+        • 5 ROLE TRAITS (one per minion role):
+            tank      → PLATING       (−5 flat dmg per hit)
+            striker   → FIRST STRIKE  (first hit after deploy +25%)
+            disruptor → JAMMER        (20% basic → def-down enemy)
+            support   → RELAY         (operator regen mesh)
+            artillery → BACKLOAD      (1st skill this fight +50%)
+        • Each carries a glyph, eerie flavor, and faction color so
+          identity reads at a glance.
+
+      Updates wired into the existing combat pipeline:
+        • Slot-4 of every deployed entity is now the FACTION SIGNATURE
+          (replaces packet_storm placeholder). The mythic synergy node
+          SIGNATURE+ specifically buffs whichever signature the deployed
+          entity owns, closing the synergy → entity loop.
+        • Signatures registered in src/data/minionSkills.ts so the
+          existing executeMinionSkill resolver picks them up — no
+          engine changes.
+        • Trait mechanics applied in playerAttack / playerMinionSkill /
+          enemy-turn absorb path (PLATING, FIRST STRIKE, JAMMER,
+          BACKLOAD wired; RELAY tick scaffold present).
+        • Deployed entity HUD now shows two chips:
+            ◆ FACTION SIGNATURE  (glyph + name in faction color)
+            ◆ ROLE TRAIT         (glyph + name in role color)
+          Player learns each species' identity by playing them.
+        • Per-deploy state reset: traitFirstAttackUsed,
+          traitFirstSkillUsed, traitRelayTick — so swapping entities
+          mid-fight gives a clean trait window.
+
+      No backend / API changes (no schema impact).
+      Bundle: 974 modules, clean.
 
       Data layer rewrite (src/data/operatorSynergy.ts):
         • 20 nodes renamed to illegal AI-engineering terminology:
