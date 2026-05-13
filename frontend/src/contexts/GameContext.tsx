@@ -98,7 +98,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return data.state as GameState;
       }
       return null;
-    } catch {
+    } catch (e: any) {
+      // ── 401 fallback: trigger automation-bypass then retry ──────────
+      // On a hard refresh to a sub-route the auth cookie may not yet be
+      // rehydrated. The web build runs in automation mode and the
+      // backend exposes /auth/automation-bypass for exactly this case.
+      // Idempotent — silently swallows non-401 errors.
+      if (e?.response?.status === 401) {
+        try {
+          await api.post('/auth/automation-bypass');
+          const { data } = await api.get('/character/me');
+          if (data?.has_character && data?.state) {
+            setState(data.state);
+            return data.state as GameState;
+          }
+        } catch { /* silent */ }
+      }
       return null;
     }
   }, [setState]);

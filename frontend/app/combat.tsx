@@ -223,14 +223,18 @@ export default function CombatScreen() {
     return () => clearInterval(id);
   }, []);
 
-  if (!state || !enemyData) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <PixelText color={COLORS.text}>Loading...</PixelText>
-      </SafeAreaView>
-    );
-  }
-  const player = state.player;
+  // ── HOOKS-SAFE PLAYER EXTRACTION ──────────────────────────────────
+  // Previously this file early-returned a <Loading/> placeholder here
+  // when `state` was null, BEFORE subsequent useEffects ran. When the
+  // GameContext autoload populated state mid-mount, the second render
+  // had MORE hooks than the first → "Rendered more hooks than during
+  // the previous render". Fix: optional-chain `player` here so later
+  // hooks can still read it safely, and DEFER the loading-screen
+  // early-return to the JSX render path (see bottom of file).
+  const player = state?.player ?? {
+    name: '', level: 1, hp: 0, maxHp: 0, mp: 0, maxMp: 0, atk: 0, def: 0, spd: 0, xp: 0, xpToNext: 1,
+    skillPoints: 0, abilities: [] as string[], equipped: { weapon: '', armor: '' }, inventory: [] as any[],
+  } as any;
 
   // Determine first turn based on speed + boss intro SFX
   useEffect(() => {
@@ -1061,6 +1065,16 @@ export default function CombatScreen() {
   };
 
   // ----- render -----
+  // Loading guard placed in the JSX path (not as an early return above)
+  // so the hook count stays IDENTICAL across re-renders when GameContext
+  // autoload flips state from null → loaded.
+  if (!state || !enemyData) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <PixelText color={COLORS.text}>Loading...</PixelText>
+      </SafeAreaView>
+    );
+  }
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Background */}
