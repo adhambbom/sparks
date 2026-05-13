@@ -54,6 +54,9 @@ import {
   resolveMinionSpriteUri,
   hasMinionSprite,
 } from '../src/systems/DynamicMinionRenderer';
+import { AtmosphereLayer } from '../src/components/AtmosphereLayer';
+import GroundShadow from '../src/components/GroundShadow';
+import AICorruptionAura from '../src/components/AICorruptionAura';
 
 // ── Render tunings ───────────────────────────────────────────
 const ROAM_TICK_MS = 650;
@@ -507,6 +510,12 @@ export default function ConduitMazeScreen() {
           zIndex: 9,
         }}
       >
+        {/* Ground shadow — grounds the minion on the floor plane. */}
+        <GroundShadow size={TILE_PX} offsetY={TILE_PX * 0.78} variant="hard" />
+
+        {/* AI corruption halo — pulses red, faster when actively chasing. */}
+        <AICorruptionAura size={TILE_PX} state={alert ? 'hot' : 'cool'} />
+
         <Image
           source={{ uri }}
           style={{

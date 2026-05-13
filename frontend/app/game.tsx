@@ -4,6 +4,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS, ACADEMY_MAP, CONDUIT_MAZE, NPCS, ENCOUNTER_POOLS, ENEMIES, HOUSES, SPRITE_ASSETS } from '../src/data/gameData';
 import BrickWall from '../src/components/BrickWall';
+import { AtmosphereLayer } from '../src/components/AtmosphereLayer';
+import GroundShadow from '../src/components/GroundShadow';
 import ConcreteFloor from '../src/components/ConcreteFloor';
 import Drawbridge from '../src/components/Drawbridge';
 import SpiralStaircase from '../src/components/SpiralStaircase';
@@ -975,6 +977,9 @@ export default function GameScreen() {
         </View>
         {/* Side bars stripped entirely — they were the worst offender for
             washing out the character and roaming enemies. */}
+
+        {/* ── ATMOSPHERE LAYER ── Code-driven cyberpunk-decay ambience. */}
+        <AtmosphereLayer width={SW} height={VIEWPORT_HEIGHT} intensity="subtle" />
       </View>
 
       {/* Top HUD - status row + action shortcuts row */}
