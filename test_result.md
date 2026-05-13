@@ -400,3 +400,98 @@ agent_communication:
       Bundle compiles cleanly, web title screen renders unchanged. Play
       Store APK must be rebuilt & re-uploaded (EAS Build) to ship these
       fixes — current APK on the store does NOT have them.
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  THE FORGOTTEN BLOCK — Level 1 Vertical Slice (Phase 1 MVP)   ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Shipped a cohesive ruined-cyberpunk-district vertical slice on
+      Level 1 ("Forgotten Block"), strictly following the user's
+      "small but polished" philosophy. NO new heavy PNG sheets needed
+      — built entirely on the existing SVG modular kit + a tight
+      curated subset of the new 200×200 expansion sprite pack.
+
+      1) ASSET PIPELINE (one-time, deterministic)
+         • Added /app/backend/scripts/slice_cyber_pack.py — auto-slices
+           both expansion sheets, strips magenta key → transparent,
+           trims, scales to 256px and saves as named PNGs.
+         • Output: /app/backend/static/sprites/cyber_pack/*.png
+           (47 sprites total; only 8 wired into the game — rest are
+           in reserve for later levels per the "tight scope" goal).
+
+      2) NEW SPRITE_ASSETS in gameData.ts
+         • Added 8 curated cyber-pack entries (spider scout, tentacle
+           caster, mech titan, terminal, lockdown panel, drone-spike,
+           etc.) — magenta key stripped at slice time.
+
+      3) ENVIRONMENTAL DRESSING DATA (new file)
+         • /app/frontend/src/data/forgottenBlock.ts
+           - CORRUPTION_TILES: 13 hand-picked coords where the floor
+             renders as the corrupted purple variant (around the
+             Sapphire Core, the spike-pad approach, and the spiral
+             staircase — thematic AI-corruption hot-spots).
+           - ROAD_MARKINGS: 6 coords with yellow road-stripe tiles
+             implying an old highway through the abandoned district.
+           - PROPS: 13 decorative SVG-prop placements (warning signs
+             flanking the spike pads, debris piles in dead corners,
+             a crashed car, pipes against walls, energy/radioactive
+             barrels along corridors, generator + terminal at the
+             south entrance, locked gate on the boss door).
+           - ENEMY_PACK_OVERRIDE: per-enemyId override that swaps
+             overworld sprites to the cyber-pack triad
+             (scout / caster / elite) WITHOUT touching combat sprites
+             — clean visual upgrade with zero gameplay regression.
+
+      4) GAME.TSX SURGICAL INTEGRATIONS
+         • Tile() renderer for floor type 0 now picks between
+           pavement / corruption / road-marking via the lookup sets.
+         • New `propOverlays` useMemo renders all FORGOTTEN_PROPS
+           absolutely-positioned over the world (zIndex 2, below
+           characters). Pure visual layer — no collision changes.
+         • Roamers map render: ENEMY_PACK_OVERRIDE lookup runs FIRST,
+           then falls back to quantum minion sheet, then default
+           scout/juggernaut. Combat sprites untouched.
+         • Auth-gate race-fix: useFocusEffect now waits for
+           authLoading before bouncing to /login (was kicking refreshed
+           sessions to login before /auth/me could resolve cookies).
+
+      5) ATMOSPHERELAYER ENHANCEMENT (rewrite, kept API stable)
+         • Added two-layer drifting volumetric FOG (opposite parallax
+           directions, 24s/38s loops, purple+magenta tinted).
+         • Added 14 AMBIENT PARTICLES — slow-rising motes with
+           random colours (mostly dim grey, occasional cyan/magenta
+           spark), staggered start delays, gentle horizontal sway,
+           and fade in/out. Native-driver where supported.
+         • Existing vignette + scanlines + AI sweep + flicker
+           preserved untouched.
+
+      6) VISUAL VERIFICATION
+         • /cyber-kit showcase route confirmed all 5 tile kinds and
+           11 prop kinds render correctly on mobile-sized viewport.
+         • Playwright bypass → /game integration screenshot confirmed:
+            - Cohesive grey ruined-pavement floor
+            - Purple AI-corruption tiles around the Sapphire Core
+            - Red AI surveillance sweep crossing the viewport
+            - Ambient particle motes drifting in the dark void
+            - New cyberpack enemy sprite visible
+            - NPCs / HUD / controls preserved
+
+      EXPLICITLY OUT OF SCOPE THIS PASS (per user "tight scope" rule)
+        - 3 missing v3 minion sprites (mech_2/3/4 slicing)
+        - Locked treasure chest mechanic
+        - Dedicated minion HP pool
+        - Refactoring game.tsx (1300+ lines)
+        - Wiring the remaining 39 cyberpack sprites — saved for later
+          districts so the slice stays focused.
+
+      NO BACKEND CHANGES (other than the slicer script + new static
+      assets). No new packages. Bundle compiles cleanly.
+
+      Next user-facing handoff: visual review on the live preview.
+      Recommended verification path:
+        → https://emerged-academy.preview.emergentagent.com/?automation=1
+        → after auto-bypass lands at /conduit-maze, navigate to /game
+        → walk south & east to traverse the corrupted hotspots and
+          see the warning signs, car wreck, terminals, etc.
+

@@ -9,6 +9,14 @@ import GroundShadow from '../src/components/GroundShadow';
 import ConcreteFloor from '../src/components/ConcreteFloor';
 import Drawbridge from '../src/components/Drawbridge';
 import SpiralStaircase from '../src/components/SpiralStaircase';
+import CyberTile from '../src/components/cyber/CyberTile';
+import CyberProp from '../src/components/cyber/CyberProp';
+import {
+  CORRUPTION_SET,
+  ROAD_SET,
+  PROPS as FORGOTTEN_PROPS,
+  ENEMY_PACK_OVERRIDE,
+} from '../src/data/forgottenBlock';
 import SheetSprite, { prefetchSheet } from '../src/components/SheetSprite';
 import { PixelText } from '../src/components/PixelText';
 import { PixelButton } from '../src/components/PixelButton';
@@ -180,10 +188,14 @@ export default function GameScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      // Wait for the auth check to complete before deciding to bounce.
+      // Otherwise a hard refresh on /game flashes a redirect to /login
+      // before /auth/me resolves the cookie session.
+      if (authLoading) return;
       if (!user) {
         router.replace('/login');
       }
-    }, [user])
+    }, [user, authLoading])
   );
 
   useEffect(() => {
@@ -703,6 +715,39 @@ export default function GameScreen() {
     [brokenBarrels, animTick]
   );
 
+  // ──────────────────────────────────────────────────────────
+  // CYBER PROP OVERLAYS — decorative-only ruined-district dressing
+  // (warning signs, debris, terminals, gates, pipes, etc.).
+  // Pure visual layer; no collision changes. Memoized statically.
+  // ──────────────────────────────────────────────────────────
+  const propOverlays = useMemo(
+    () =>
+      FORGOTTEN_PROPS.map((p) => {
+        // Props are slightly larger than the tile so they read clearly,
+        // and bottom-anchored so they sit "on" the floor instead of
+        // floating in the centre.
+        const PW = TILE * 1.15;
+        const PH = TILE * 1.15;
+        return (
+          <View
+            key={`prop-${p.x}-${p.y}-${p.kind}`}
+            style={{
+              position: 'absolute',
+              left: p.x * TILE + (TILE - PW) / 2,
+              top:  p.y * TILE + (TILE - PH) / 2,
+              width: PW,
+              height: PH,
+              zIndex: 2, // below characters (5+), above floor (0)
+            }}
+            pointerEvents="none"
+          >
+            <CyberProp kind={p.kind} size={PW} />
+          </View>
+        );
+      }),
+    []
+  );
+
   if (authLoading || !loaded || !state) {
     return (
       <View style={styles.center}>
@@ -758,6 +803,8 @@ export default function GameScreen() {
           {/* Sapphire Core, Spike Pad, Destructible Barrel and Spiral Staircase
               overlays — memoized so they don't re-mount every movement frame. */}
           {staticOverlays}
+          {/* Forgotten-Block decorative props (SVG) — pure visual layer.  */}
+          {propOverlays}
 
           {/* Animated drawbridge at the throne chamber south entrance (9,5).
               Lowers as the player approaches and raises again when they walk away.
@@ -844,11 +891,15 @@ export default function GameScreen() {
               so each species shows its own art in the overworld.  */}
           {roamers.map((r) => {
             const isBoss = r.boss;
-            // Sprite priority: Quantum sheet (if mapped) → enemyJuggernaut (boss / tier>=3)
-            // → enemyScout (default). This mirrors combat.tsx's `resolveDeployedMinionUri`
-            // so a Phreak roamer in the world looks identical to the one you fight.
+            // Sprite priority for the Forgotten Block district:
+            //   1) Cyber-pack override (cohesive ruined-AI aesthetic)
+            //   2) Quantum-Minion sheet (if mapped)
+            //   3) Default scout/juggernaut silhouettes
             let spriteUri: string;
-            if (hasMinionSprite(r.enemyId)) {
+            const packKey = ENEMY_PACK_OVERRIDE[r.enemyId];
+            if (packKey && (SPRITE_ASSETS as any)[packKey]) {
+              spriteUri = (SPRITE_ASSETS as any)[packKey];
+            } else if (hasMinionSprite(r.enemyId)) {
               spriteUri = resolveMinionSpriteUri(r.enemyId) || SPRITE_ASSETS.enemyScout;
             } else {
               spriteUri = isBoss ? SPRITE_ASSETS.enemyJuggernaut : SPRITE_ASSETS.enemyScout;
@@ -1129,11 +1180,16 @@ function Tile({ type, x, y }: { type: number; x: number; y: number }) {
     );
   }
 
-  // Floor tile → procedural ConcreteFloor texture (light industrial grey)
+  // Floor tile → CyberTile pavement with corruption / road-stripe variants
+  // for cohesive ruined-cyberpunk-district look. Walkability unchanged.
   if (type === 0) {
+    const key = `${x},${y}`;
+    let kind: 'pavement' | 'corruption' | 'road-marking' = 'pavement';
+    if (CORRUPTION_SET.has(key)) kind = 'corruption';
+    else if (ROAD_SET.has(key))  kind = 'road-marking';
     return (
       <View style={[styles.tile, { width: TILE, height: TILE }]}>
-        <ConcreteFloor size={TILE} variant={(x * 19 + y * 23) % 11} />
+        <CyberTile kind={kind} size={TILE} x={x} y={y} />
       </View>
     );
   }

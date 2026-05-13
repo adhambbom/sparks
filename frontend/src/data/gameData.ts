@@ -19,6 +19,17 @@ export const SPRITE_ASSETS = {
   npcOrion: `${_BE}/api/static/sprites/npc_orion.png`,
   npcJax: `${_BE}/api/static/sprites/npc_jax.png`,
   npcLyra: `${_BE}/api/static/sprites/npc_lyra.png`,
+  // ── CYBER PACK — minimal curated subset for the Forgotten Block district.
+  // 3 enemy types (scout/caster/elite) + decoration props. Magenta key was
+  // stripped at slice time; PNGs ship with proper alpha.
+  cySpiderScout:    `${_BE}/api/static/sprites/cyber_pack/spider_scout.png`,
+  cyTentacleCaster: `${_BE}/api/static/sprites/cyber_pack/tentacle_floater.png`,
+  cyMechTitan:      `${_BE}/api/static/sprites/cyber_pack/mech_titan.png`,
+  cyAlertTerminal:  `${_BE}/api/static/sprites/cyber_pack/alert_terminal.png`,
+  cyContainmentTube:`${_BE}/api/static/sprites/cyber_pack/containment_tube.png`,
+  cyLockdownPanel:  `${_BE}/api/static/sprites/cyber_pack/lockdown_panel.png`,
+  cyDroneSpike:     `${_BE}/api/static/sprites/cyber_pack/drone_spike.png`,
+  cyGhostShadow:    `${_BE}/api/static/sprites/cyber_pack/ghost_shadow.png`,
 };
 
 // Color palette (cyberpunk neon on dark)
