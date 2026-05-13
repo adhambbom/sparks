@@ -24,7 +24,15 @@ import { resolveMinionSpriteUri, hasMinionSprite } from '../src/systems/DynamicM
 import { ENEMIES as _ENEMIES } from '../src/data/gameData';
 import { getEnemyVisual } from '../src/systems/enemyVisual';
 import UnifiedSprite from '../src/components/UnifiedSprite';
-import { FACTIONS } from '../src/data/factions';
+import { FACTIONS, FactionId } from '../src/data/factions';
+import {
+  combatMultiplier,
+  classifyEffectiveness,
+  getSpeciesKit,
+  ROLES,
+  STATUSES,
+  getTypeMultiplier,
+} from '../src/data/combatBalance';
 
 /** Resolve the *deployed minion* sprite uri:
  *  1. Prefer the per-variant Quantum-Minion sheet (phreak/vrghost/mech) if mapped.
@@ -169,16 +177,49 @@ export default function CombatScreen() {
     ]).start();
   };
 
+  // ── Faction-aware combat balance ────────────────────────────────────
+  // The DEFENDER's faction comes from the unified enemy-visual lookup
+  // (same source-of-truth as the overworld + render glow).
+  // The ATTACKER's faction depends on who's swinging:
+  //   • Deployed minion present → its species faction.
+  //   • No minion → 'player' (neutral 1.0× across the board).
+  // We expose helpers so all damage calcs in this file go through the
+  // same gate — keeps minion-vs-player power gap consistent.
+  const enemyFaction: FactionId =
+    getEnemyVisual(enemyData.id || '', { forceBoss: bossFromRoute || !!enemyData.isBoss })
+      .faction.id;
+
   const elementMod = (atkEl: Element): number => {
     if (enemyData.weakness === atkEl) return 1.6;
     if (enemyData.resist === atkEl) return 0.5;
     return 1.0;
   };
 
-  const computeDamage = (basePower: number, element: Element, atkStat: number, defStat: number): number => {
+  /** Single source of truth for damage. atkFaction defaults to 'player'. */
+  const computeDamage = (
+    basePower: number,
+    element: Element,
+    atkStat: number,
+    defStat: number,
+    atkFaction: FactionId = 'player',
+    roleCritBonus = 0,
+  ): { dmg: number; tier: ReturnType<typeof classifyEffectiveness>; crit: boolean } => {
     const variance = 0.85 + Math.random() * 0.3;
-    const raw = Math.max(1, Math.floor((atkStat * basePower - defStat * 0.5) * variance * elementMod(element)));
-    return Math.max(1, raw);
+    const { mult: typeMult, crit, tier } = combatMultiplier(atkFaction, enemyFaction, roleCritBonus);
+    const raw = Math.max(
+      1,
+      Math.floor((atkStat * basePower - defStat * 0.5) * variance * elementMod(element) * typeMult),
+    );
+    return { dmg: Math.max(1, raw), tier, crit };
+  };
+
+  /** Show a small "SUPER EFFECTIVE!" / "RESISTED" floater above the enemy. */
+  const showEffectiveness = (tier: ReturnType<typeof classifyEffectiveness>, crit: boolean) => {
+    if (crit) showFloater('CRIT!', '#fff066', 'e');
+    if (tier === 'super')    showFloater('SUPER EFFECTIVE!', '#ff60ff', 'e');
+    else if (tier === 'strong')  showFloater('STRONG!',           '#a0ff60', 'e');
+    else if (tier === 'resisted') showFloater('Resisted...',      '#80a0c0', 'e');
+    else if (tier === 'immune') showFloater('NO EFFECT',           '#666',    'e');
   };
 
   // ----- player actions -----
@@ -186,11 +227,22 @@ export default function CombatScreen() {
     if (busy) return;
     setBusy(true);
     sfx.hit();
-    const dmg = computeDamage(1.0, 'physical', player.atk, enemyData.def);
+    // Determine attacker faction: deployed minion (with role crit bonus) or player.
+    let atkFaction: FactionId = 'player';
+    let atkStat = player.atk;
+    let critBonus = 0;
+    if (deployedMinion) {
+      const kit = getSpeciesKit(deployedMinion.speciesId);
+      atkFaction = kit.faction;
+      atkStat = Math.round(deployedMinion.atk * ROLES[kit.role].mods.atk);
+      critBonus = ROLES[kit.role].critBonus;
+    }
+    const { dmg, tier, crit } = computeDamage(1.0, 'physical', atkStat, enemyData.def, atkFaction, critBonus);
     setEnemyHp((hp) => Math.max(0, hp - dmg));
     showFloater(`-${dmg}`, COLORS.neonYellow, 'e');
+    showEffectiveness(tier, crit);
     shakeAnim(enemyShake);
-    pushLog(`${player.name} strikes for ${dmg}!`);
+    pushLog(`${deployedMinion ? deployedMinion.name : player.name} strikes for ${dmg}!`);
     setTimeout(() => endPlayerTurn(), 220);
   };
 
@@ -206,9 +258,10 @@ export default function CombatScreen() {
     applyMpCost(ab.cost);
     if (ab.type === 'attack') {
       sfx.bigHit();
-      let dmg = computeDamage(ab.power, ab.element, player.atk, enemyData.def);
+      const { dmg, tier, crit } = computeDamage(ab.power, ab.element, player.atk, enemyData.def, 'player', 0);
       setEnemyHp((hp) => Math.max(0, hp - dmg));
       showFloater(`-${dmg}`, COLORS.neonCyan, 'e');
+      showEffectiveness(tier, crit);
       shakeAnim(enemyShake);
       pushLog(`${ab.name}! ${dmg} damage.`);
       if (ab.effect === 'burn') setEnemyBurn(3);
@@ -386,12 +439,22 @@ export default function CombatScreen() {
     if (result.sfxTag === 'bigHit') sfx.bigHit();
     else if (result.sfxTag === 'skill') sfx.skill();
     else sfx.hit();
+    // ── FACTION TYPE-CHART AMPLIFICATION ────────────────────────────
+    // Minion skills get the full type-effectiveness treatment. This is
+    // the primary mechanic that makes minions feel essential: a Phreak
+    // (corrupted_ai) Glitch Beam vs an Industrial Bot lands for 1.8×.
+    const kit = getSpeciesKit(deployedMinion.speciesId);
+    const { mult: typeMult, crit, tier } = combatMultiplier(
+      kit.faction, enemyFaction, ROLES[kit.role].critBonus,
+    );
+    const finalDmg = Math.max(1, Math.floor(result.damage * typeMult));
     // Damage application — uses the SAME pipeline as the existing playerAttack:
     // mutate enemy HP via setEnemyHp + floater + shake. No engine changes.
-    setEnemyHp((hp) => Math.max(0, hp - result.damage));
-    showFloater(`-${result.damage}`, COLORS.neonMagenta, 'e');
+    setEnemyHp((hp) => Math.max(0, hp - finalDmg));
+    showFloater(`-${finalDmg}`, COLORS.neonMagenta, 'e');
+    showEffectiveness(tier, crit);
     shakeAnim(enemyShake);
-    pushLog(result.log);
+    pushLog(result.log + (tier === 'super' ? ' (SUPER EFFECTIVE!)' : tier === 'resisted' ? ' (resisted)' : ''));
     // Status modulation — wired into existing state slots:
     if (result.status === 'defense_down') {
       setEnemyDefDebuff(result.statusTurns);
@@ -458,7 +521,8 @@ export default function CombatScreen() {
       const ab = ABILITIES[abId];
       let dmg = 0;
       if (ab && ab.type === 'attack') {
-        dmg = computeDamage(ab.power, ab.element, enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0));
+        const r = computeDamage(ab.power, ab.element, enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0), enemyFaction, 0);
+        dmg = r.dmg;
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); pushLog('Shield absorbs!'); }
         applyDamage(dmg);
         sfx.damage();
@@ -466,7 +530,8 @@ export default function CombatScreen() {
         shakeAnim(playerShake);
         pushLog(`${enemyData.name} ${ab.name}! ${dmg} dmg.`);
       } else {
-        dmg = computeDamage(1.0, 'physical', enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0));
+        const r = computeDamage(1.0, 'physical', enemyAtk, player.def + (firewallTurns > 0 ? Math.floor(player.def * 0.5) : 0), enemyFaction, 0);
+        dmg = r.dmg;
         if (shield) { dmg = Math.floor(dmg * 0.5); setShield(false); }
         applyDamage(dmg);
         sfx.damage();
@@ -585,11 +650,59 @@ export default function CombatScreen() {
               {isBoss ? '⚠ ' : ''}{enemyData.name.toUpperCase()}{phaseChanged ? ' [ENRAGED]' : ''}
             </PixelText>
             <PixelText size={8} color={COLORS.textDim}>
-              TIER {enemyData.tier} · SPD {enemyData.spd}{isBoss ? ' · BOSS' : ''}
+              TIER {enemyData.tier} · SPD {enemyData.spd}{isBoss ? ' · BOSS' : ''} · {FACTIONS[enemyFaction].label}
             </PixelText>
             <View style={{ marginTop: 4 }}>
               <StatBar value={enemyHp} max={enemyData.hp} color={isBoss ? COLORS.neonMagenta : COLORS.hp} bgColor={COLORS.hpBg} width={170} height={8} showText={false} />
             </View>
+            {/* ── TYPE ADVANTAGE HINT ─────────────────────────────────────
+                Scans the player's captured-minion party. If any minion would
+                land SUPER-EFFECTIVE damage on this enemy, surface its name
+                so the player knows which minion to deploy. This is the
+                educational layer that teaches "minions are tools, not pets". */}
+            {(() => {
+              const party = state?.quantum?.party || [];
+              const matches = party
+                .map((m) => {
+                  const k = getSpeciesKit(m.speciesId);
+                  return { minion: m, faction: k.faction, role: k.role,
+                           mult: getTypeMultiplier(k.faction, enemyFaction) };
+                })
+                .sort((a, b) => b.mult - a.mult);
+              const best = matches[0];
+              if (!deployedMinion && best && best.mult >= 1.4) {
+                return (
+                  <View style={{ marginTop: 4, paddingHorizontal: 4, paddingVertical: 2, borderWidth: 1, borderColor: FACTIONS[best.faction].glowColor as any, alignSelf: 'flex-start' }}>
+                    <PixelText size={8} color={FACTIONS[best.faction].glowColor as any} bold>
+                      💡 DEPLOY {best.minion.name.toUpperCase()} ({best.mult.toFixed(1)}×)
+                    </PixelText>
+                  </View>
+                );
+              }
+              if (deployedMinion) {
+                const k = getSpeciesKit(deployedMinion.speciesId);
+                const mult = getTypeMultiplier(k.faction, enemyFaction);
+                const tier = classifyEffectiveness(mult);
+                const label =
+                  tier === 'super' ? '⚡ SUPER EFFECTIVE'
+                  : tier === 'strong' ? '↑ STRONG'
+                  : tier === 'resisted' ? '↓ RESISTED'
+                  : tier === 'immune' ? '✕ NO EFFECT'
+                  : '· NEUTRAL';
+                const color =
+                  tier === 'super' || tier === 'strong' ? '#a0ff60'
+                  : tier === 'resisted' || tier === 'immune' ? '#ff8080'
+                  : COLORS.textDim;
+                return (
+                  <View style={{ marginTop: 4 }}>
+                    <PixelText size={8} color={color} bold>
+                      {label}  ·  {ROLES[k.role].label}
+                    </PixelText>
+                  </View>
+                );
+              }
+              return null;
+            })()}
           </View>
 
           {/* Enemy sprite — anchored to the same top-left zone, below the plate. */}
@@ -826,10 +939,22 @@ export default function CombatScreen() {
               // Use the same enemy-visual resolver so each minion's thumb
               // matches what it looks like in combat + overworld.
               const mv = getEnemyVisual(m.speciesId);
+              const k = getSpeciesKit(m.speciesId);
+              const matchupMult = getTypeMultiplier(k.faction, enemyFaction);
+              const matchupTier = classifyEffectiveness(matchupMult);
+              const isAdvantage = matchupTier === 'super' || matchupTier === 'strong';
+              const isDisadvantage = matchupTier === 'resisted' || matchupTier === 'immune';
               return (
                 <TouchableOpacity
                   key={m.uid}
-                  style={[styles.skillBtn, { borderColor: COLORS.neonYellow, alignItems: 'center' }]}
+                  style={[
+                    styles.skillBtn,
+                    {
+                      borderColor: isAdvantage ? '#a0ff60' : isDisadvantage ? '#ff8080' : COLORS.neonYellow,
+                      borderWidth: isAdvantage ? 2 : 1,
+                      alignItems: 'center',
+                    },
+                  ]}
                   onPress={() => playerDeployMinion(m)}
                   testID={`combat-deploy-${m.uid}`}
                 >
@@ -842,8 +967,16 @@ export default function CombatScreen() {
                     />
                   </View>
                   <PixelText size={11} color={COLORS.neonYellow} bold>{m.name.toUpperCase()}</PixelText>
-                  <PixelText size={9} color={COLORS.textDim}>Lv{m.level} · T{m.tier}</PixelText>
-                  <PixelText size={9} color={COLORS.text} style={{ marginTop: 3 }}>ATK {m.atk} · {m.skills.length} skills</PixelText>
+                  <PixelText size={9} color={FACTIONS[k.faction].glowColor as any} bold>
+                    {ROLES[k.role].label}
+                  </PixelText>
+                  <PixelText size={8} color={COLORS.textDim}>Lv{m.level} · T{m.tier}</PixelText>
+                  {isAdvantage && (
+                    <PixelText size={8} color={'#a0ff60'} bold>⚡ {matchupMult.toFixed(1)}×</PixelText>
+                  )}
+                  {isDisadvantage && (
+                    <PixelText size={8} color={'#ff8080'} bold>↓ {matchupMult.toFixed(1)}×</PixelText>
+                  )}
                 </TouchableOpacity>
               );
             })}
