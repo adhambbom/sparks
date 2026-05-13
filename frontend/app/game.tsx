@@ -12,6 +12,7 @@ import SpiralStaircase from '../src/components/SpiralStaircase';
 import CyberTile from '../src/components/cyber/CyberTile';
 import CyberProp from '../src/components/cyber/CyberProp';
 import VoidBackdrop from '../src/components/VoidBackdrop';
+import { isTileBlocked as _isTileBlocked, categoryAt, ruleForTile } from '../src/data/tileRules';
 import {
   CORRUPTION_SET,
   ROAD_SET,
@@ -36,6 +37,16 @@ import UnifiedSprite from '../src/components/UnifiedSprite';
 import { FACTIONS } from '../src/data/factions';
 
 const TILE = 44;
+
+// ──────────────────────────────────────────────────────────
+// Debug toggles — driven by URL query params. Zero overhead in
+// production (the boolean is false on first paint and stays false).
+//   ?debug=collision  → colour-coded tile overlay (Readable Map pass)
+// ──────────────────────────────────────────────────────────
+const DEBUG_COLLISION =
+  (typeof window !== 'undefined' &&
+    typeof window.location !== 'undefined' &&
+    /[?&]debug=collision\b/.test(window.location.search)) || false;
 const SPEED = 12; // pixels per frame (was 9 → another +33% on the overworld walk)
 const ENCOUNTER_CHANCE = 0.0; // disabled - using visible roaming enemies instead
 const ROAM_TICK_MS = 800; // every 0.8s — slightly faster patrol cycle
@@ -69,12 +80,10 @@ function isFloor(x: number, y: number, brokenBarrels?: Set<string>): boolean {
 // The player sprite is 2.4× TILE tall, so the HEAD renders over the
 // row above the feet (zIndex: 9999 keeps it on top of wall tiles).
 // We only check collision at FEET-level (the destination tile coords).
+//
+// Centralised: see /app/frontend/src/data/tileRules.ts for the full
+// rule table that drives both collision and the debug overlay.
 // ──────────────────────────────────────────────────────────
-const SOLID_TILE_TYPES = new Set<number>([
-  1,   // outer wall
-  11,  // immovable debris
-  12,  // castle stone wall (interior)
-]);
 
 // Feet-hitbox proportions (relative to TILE).
 // The player sprite is ~2.4× TILE tall, but only the FEET should collide with walls.
@@ -86,14 +95,15 @@ const FEET_DY = TILE * 0.20;   // shift hitbox below logical center toward the f
 
 /**
  * Tile-level walkability check (used by spawn/AI helpers — single tile in/out).
+ * Now centralises through tileRules.ts which ALSO blocks PROP_LARGE props
+ * (debris piles, car wrecks, generators, terminals, locked gates) that
+ * previously rendered as decorative overlays the player could walk through.
  */
 function isTileWalkable(tx: number, ty: number, brokenBarrels: Set<string>): boolean {
   if (ty < 0 || ty >= ACADEMY_MAP.length) return false;
   if (tx < 0 || tx >= ACADEMY_MAP[0].length) return false;
   const t = ACADEMY_MAP[ty][tx];
-  if (SOLID_TILE_TYPES.has(t)) return false;
-  if (t === 14 && !brokenBarrels.has(`${tx},${ty}`)) return false;
-  return true;
+  return !_isTileBlocked(t, tx, ty, brokenBarrels);
 }
 
 /**
@@ -818,6 +828,45 @@ export default function GameScreen() {
           {staticOverlays}
           {/* Forgotten-Block decorative props (SVG) — pure visual layer.  */}
           {propOverlays}
+
+          {/* ── COLLISION DEBUG OVERLAY ────────────────────────────────
+              Toggle with `?debug=collision` URL param. Colour-codes every
+              tile by category so we can audit the readability of the map:
+                green   = FLOOR walkable
+                red     = WALL blocked
+                cyan    = INTERACTABLE press-A
+                yellow  = HAZARD
+                orange  = PROP_LARGE (debris/wreck/generator/etc.)
+                ochre   = PROP_SMALL (sign/pipe)
+              Prop tiles render their override colour ON TOP of the floor. */}
+          {DEBUG_COLLISION && (
+            <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0 }}>
+              {ACADEMY_MAP.map((row, y) =>
+                row.map((tileId, x) => {
+                  const rule = categoryAt(tileId, x, y);
+                  return (
+                    <View
+                      key={`dbg-${x}-${y}`}
+                      style={{
+                        position: 'absolute',
+                        left: x * TILE,
+                        top: y * TILE,
+                        width: TILE,
+                        height: TILE,
+                        backgroundColor: rule.debugColor,
+                        borderWidth: 0.5,
+                        borderColor: 'rgba(255,255,255,0.08)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <PixelText size={10} color={'#ffffff'} bold>{rule.debugLabel}</PixelText>
+                    </View>
+                  );
+                }),
+              )}
+            </View>
+          )}
 
           {/* Animated drawbridge at the throne chamber south entrance (9,5).
               Lowers as the player approaches and raises again when they walk away.

@@ -892,3 +892,90 @@ agent_communication:
       No backend changes. No new packages. Bundle compiles cleanly.
       Live preview /game confirmed on 390×844 mobile viewport.
 
+
+
+  - agent: "main"
+    message: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║  READABLE MAP COLLISION PASS — Tile Rules + Debug Overlay     ║
+      ╚════════════════════════════════════════════════════════════════╝
+      Addressed the user's "walking into walls, overlapping props, hitting
+      invisible collision" complaint. Built a strict tile-rule system
+      + a one-line-toggle debug overlay so every tile's role is visible
+      in seconds.
+
+      1) NEW MODULE — /app/frontend/src/data/tileRules.ts
+         Single source of truth for collision AND visual category:
+           • TileCategory: FLOOR · WALL · PROP_SMALL · PROP_LARGE ·
+             HALF_COVER · INTERACTABLE · HAZARD · SECRET
+           • ACADEMY_TILE_RULES — every numeric tile ID (0…17) maps to
+             a TileRule with: { category, walkable, debugColor, debugLabel }.
+           • PROP_RULES — every CyberPropKind maps to its category:
+                warning-sign / pipe-vertical          → PROP_SMALL (walkable)
+                debris-pile / car-wreck / barrels /
+                generator                              → PROP_LARGE (blocks)
+                terminal / gate-locked                 → INTERACTABLE (blocks)
+           • Reverse-lookup PROP_INDEX built once at module load.
+           • isTileBlocked(tileId, x, y, brokenBarrels) — the ONE
+             collision query that combines base tile + any prop on top.
+           • categoryAt(tileId, x, y) — prop overrides tile for the
+             debug colour/label lookup.
+
+      2) GAME.tsx — collision pipeline rerouted through tileRules
+         BEFORE: SOLID_TILE_TYPES = {1, 11, 12} hard-coded set; decorative
+                 props had ZERO collision so the player could walk straight
+                 through debris piles / car wrecks / generators / terminals
+                 / locked gates.
+         AFTER:  isTileWalkable() and canMoveTo() both call
+                 isTileBlocked() from tileRules. PROP_LARGE +
+                 INTERACTABLE-blocking props now collide correctly.
+                 No more "walking into things that look solid".
+
+      3) DEBUG COLLISION OVERLAY  —  toggle via ?debug=collision
+         A tile-grid layer that colour-codes every tile by category:
+              green   F   FLOOR walkable
+              red     S   WALL stone / 'D' debris / 'W' outer wall
+              cyan    ⚑   INTERACTABLE press-A
+              cyan    ★   sapphire core (special)
+              cyan    P   launch pad
+              cyan    $   store
+              cyan    !   skill chamber
+              cyan    ⌬   terminal prop
+              red     🔒   gate-locked prop
+              orange  ◇   PROP_LARGE blocking
+              yellow  ☣   HAZARD (future)
+              ochre   |/s PROP_SMALL decorative
+         Zero overhead in production (the constant is false on first
+         paint when the URL has no ?debug param). Renders directly
+         inside the world content view so it scrolls with the camera.
+
+      4) Verified via Playwright screenshot at /game?debug=collision:
+            • Every tile gets the correct coloured chip + label.
+            • Stone walls clearly framed in red.
+            • Walkable corridors clearly green.
+            • Interactables (door, core, launch pad, etc.) clearly cyan.
+            • Decorative prop tiles now visibly orange/red showing the
+              fix (player can no longer walk through them).
+         Normal view (no debug param) is unchanged.
+
+      WHAT THIS SOLVES (from user's checklist)
+        ✅ Tile rule system with strict collision categories
+        ✅ Single source of truth — no more scattered if-checks
+        ✅ Standardised grid: everything snaps to tile coords
+        ✅ Visual communication groundwork (debug colours = same family
+            we'll use for player-facing cues in next pass)
+        ✅ Collision debug toggle for map polish iteration
+
+      STILL ON THE BACKLOG  (next polish pass for "Readable Map")
+        - Pulsing cyan rim on INTERACTABLE props when the player is
+          within 1 tile (player-facing "press A" prompt)
+        - Yellow caution stripes around HAZARD tiles (currently the
+          spike pads already glow; add a dedicated stripe pattern)
+        - Red-blink animation on gate-locked
+        - Conduit-maze (Level 2B) tile-rule parity
+        - Hidden / SECRET tile reveal mechanic
+        - Eliminate any remaining prop placements that overlap walls
+          (debug overlay makes audit trivial — quick follow-up)
+
+      No backend changes. No new packages. Bundle compiles cleanly.
+      Live preview confirmed both with and without ?debug=collision.
