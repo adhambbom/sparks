@@ -103,6 +103,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [setState]);
 
+  // ── AUTO-LOAD ON MOUNT ─────────────────────────────────────────────
+  // Previously the GameContext only filled in state when game.tsx
+  // explicitly called loadFromServer() on mount. Any direct-navigation
+  // to a sub-route like /operator-framework or /skills would hang on a
+  // "Loading…" placeholder because nothing kicked off the fetch.
+  // We now self-load on mount — idempotent, cheap, and unblocks
+  // every screen that depends on state being present.
+  React.useEffect(() => {
+    if (stateRef.current) return;
+    void loadFromServer();
+  }, [loadFromServer]);
+
   const saveToServer = useCallback(async () => {
     if (!stateRef.current) return;
     try {
