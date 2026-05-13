@@ -57,40 +57,26 @@ export default function OperatorFrameworkScreen() {
     ).start();
   }, [pulse]);
 
-  if (!state) {
-    return (
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <PixelText size={14} color={COLORS.neonMagenta} bold glow autoFit>SYNERGY GRID</PixelText>
-          <PixelText size={9} color={COLORS.textDim} style={{ marginTop: 12, textAlign: 'center' }}>
-            Loading operator state…
-          </PixelText>
-          <View style={{ height: 20 }} />
-          <PixelButton title="◀ BACK" onPress={() => router.back()} color={COLORS.neonCyan} size="md" />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const player = state.player;
-  const owned = useMemo(() => new Set(player.synergyNodes ?? []), [player.synergyNodes]);
-  const points = player.synergyPoints ?? 0;
-
-  const onUnlock = async (id: string) => {
-    sfx.confirm();
-    const ok = unlockSynergyNode(id);
-    if (!ok) {
-      Alert.alert('UNLOCK FAILED', 'No synergy points available.');
-      return;
-    }
-    await saveToServer();
-  };
-
-  const branchNodes = SYNERGY_NODES.filter((n) => n.branch === selectedBranch);
+  // ── RULES OF HOOKS: declare ALL hooks BEFORE any early return ────
+  // State can transition from `null` → loaded mid-mount thanks to the
+  // GameProvider auto-load effect. If the loading-placeholder branch
+  // returned BEFORE the useMemo calls below, React would see a
+  // different hook count between renders and throw
+  // "Rendered more hooks than during the previous render."
+  // Fix: compute the memo'd inputs from a safe `player` fallback so the
+  // hook list is identical regardless of state availability.
+  const player = state?.player;
+  const owned = useMemo(
+    () => new Set(player?.synergyNodes ?? []),
+    [player?.synergyNodes],
+  );
+  const points = player?.synergyPoints ?? 0;
+  const branchNodes = useMemo(
+    () => SYNERGY_NODES.filter((n) => n.branch === selectedBranch),
+    [selectedBranch],
+  );
   const branchData = SYNERGY_BRANCHES[selectedBranch];
 
-  // ── DETERMINISTIC LAYOUT ────────────────────────────────────────
-  // For each tier, equally distribute its nodes horizontally.
   const positions: Pos[] = useMemo(() => {
     const out: Pos[] = [];
     for (let tier = 1; tier <= 4; tier++) {
@@ -108,10 +94,6 @@ export default function OperatorFrameworkScreen() {
   const gridHeight = GRID_PAD * 2 + 4 * NODE_H + 3 * TIER_GAP_Y;
   const gridWidth = 320 + GRID_PAD * 2;
 
-  // ── CONNECTING LINES ────────────────────────────────────────────
-  // For every node that has a prereq, draw a line from prereq center
-  // (bottom) to its own center (top). Style: subtle dotted dim line if
-  // both not owned, glowing branch-color line if BOTH are owned.
   const lines = useMemo(() => {
     const arr: { x1: number; y1: number; x2: number; y2: number; active: boolean }[] = [];
     for (const p of positions) {
@@ -130,6 +112,22 @@ export default function OperatorFrameworkScreen() {
   }, [positions, owned]);
 
   const selected = selectedNode ? SYNERGY_NODES.find((n) => n.id === selectedNode) ?? null : null;
+
+  // ── NOW it is safe to early-return: all hooks above are unconditional.
+  if (!state || !player) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <PixelText size={14} color={COLORS.neonMagenta} bold glow autoFit>SYNERGY GRID</PixelText>
+          <PixelText size={9} color={COLORS.textDim} style={{ marginTop: 12, textAlign: 'center' }}>
+            Loading operator state…
+          </PixelText>
+          <View style={{ height: 20 }} />
+          <PixelButton title="◀ BACK" onPress={() => router.back()} color={COLORS.neonCyan} size="md" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

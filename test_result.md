@@ -330,9 +330,100 @@ deployment_readiness_ui:
     implemented: true
     working: false
     file: "/app/frontend/app/operator-framework.tsx, /app/frontend/app/combat.tsx, /app/frontend/app/game.tsx"
-    stuck_count: 1
+    stuck_count: 2
     priority: "high"
     needs_retesting: true
+    status_history:
+      - working: false
+        agent: "testing"
+        comment: |
+          RE-VERIFICATION #2 AFTER HOOKS FIX — STILL BLOCKED. ❌
+
+          The "Rendered more hooks than during the previous render"
+          crash STILL FIRES, and the React stack trace now explicitly
+          identifies the offending component as:
+            at CombatScreen (./combat.tsx)
+            at renderWithHooks ...
+            "The above error occurred in the <CombatScreen(./combat.tsx)>
+             component."
+
+          So the main agent's claim that "combat.tsx is hooks-safe — it
+          was misattributed in the previous report" is INCORRECT. The
+          actual file that needs the hooks-safety refactor is
+          /app/frontend/app/combat.tsx (operator-framework.tsx may or
+          may not also need it, but combat.tsx is definitely guilty).
+
+          Hooks log captured from the console:
+            41. useState
+            42. useRef
+            43-46. useState..useEffect
+            47. undefined → useEffect    ← extra hook on 2nd render
+
+          PER-SECTION RESULTS (390×844 mobile):
+
+          1) SYNERGY GRID (/operator-framework direct nav)   ❌ POLISH/BLOCK
+             • Initial visit: no "Loading operator state…" string, but
+               also NO branches (DEPLOYMENT / STABILITY / OVERCLOCK /
+               CORRUPTION / PROTOCOL — 0/5 found), zero SVG line/path
+               elements, no node cards. The screen rendered empty.
+             • Hard refresh on /operator-framework reverted to the OLD
+               "Loading operator state…" hang (still_loading=True after
+               7 s). So the autoload race that previous report flagged
+               IS NOT fully fixed — refresh path still spins.
+
+          2) COMBAT (/combat direct nav)                     ❌ BLOCK
+             • Combat UI tokens (STRIKE / PROTOS / PATCH / STAB / GRID
+               / ESCAPE) all missing from rendered DOM.
+             • Console emitted the React hooks order warning AND the
+               red-screen error "Rendered more hooks than during the
+               previous render" with stack inside CombatScreen.
+             • LogBoxStateSubscription error boundary intercepted the
+               crash — that is what produced the "Something went wrong"
+               text my detector caught.
+
+          3) TUTORIAL COPY — INTERFACE BOUND                ⚠ POLISH
+             • The first-launch tutorial did not surface on this run
+               (flags persisted in AsyncStorage from prior sessions),
+               so I could not screenshot the live INTERFACE BOUND
+               prompt. HOWEVER, the source file
+               /app/frontend/src/data/tutorialPrompts.ts lines 43-52
+               was inspected directly and the body lines read EXACTLY:
+                  'D-PAD moves. A = primary action.'
+                  'B = cancel / system menu.'
+                  'A sits under your right thumb.'
+               Copy is correct in code; visual confirmation requires
+               a clean AsyncStorage / fresh device.
+
+          4) OVERWORLD ROOT (/)                              ✅ PASS
+             • / loads cleanly, HUD text "PLAYWRIGHTRUNNER / BAG /
+               NETWORK / 999" all present, no red screen, no hook
+               errors on this route.
+
+          CONSOLE ERRORS CAPTURED:
+            • "React has detected a change in the order of Hooks called…"
+            • "Error: Rendered more hooks than during the previous render."
+              stack → CombatScreen (./combat.tsx)
+            • 401s on background polling (non-blocking).
+
+          ════════════════════════════════════════════════════════════════
+          VERDICT: 🚫 BLOCKERS REMAIN — NOT READY FOR AAB BUILD
+          ════════════════════════════════════════════════════════════════
+
+          Required fixes BEFORE a third re-verification:
+            1. /app/frontend/app/combat.tsx — move ALL useState /
+               useEffect / useMemo / useRef hook calls ABOVE every
+               early return (loading guard, no-encounter guard, null
+               state guard, etc.). Confirm by greping for `if (...) return`
+               appearing earlier than the last hook in the file.
+            2. /app/frontend/app/operator-framework.tsx — refresh-path
+               hang on "Loading operator state…" is still reproducible.
+               Likely autoload promise never resolves on cold reload
+               when AuthContext is still rehydrating. Add a fallback
+               to render the EMPTY grid (synergyNodes=[]) once the
+               state arrives, instead of awaiting a player flag that
+               may be undefined on bypass accounts.
+
+          NO CODE CHANGES MADE BY TESTER. Verify-only run as instructed.
     status_history:
       - working: false
         agent: "testing"
