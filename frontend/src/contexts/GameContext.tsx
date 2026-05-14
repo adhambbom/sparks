@@ -135,7 +135,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     try {
       await api.post('/game/save', { state: stateRef.current });
     } catch (e) {
-      console.log('save failed', e);
+      // Production-safe: gated to dev so the release bundle stays
+      // free of console noise on transient network failures.
+      if (__DEV__) console.warn('save failed', e);
     }
   }, []);
 
@@ -144,7 +146,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     try {
       await api.post('/game/checkpoint', { state: stateRef.current });
     } catch (e) {
-      console.log('checkpoint failed', e);
+      if (__DEV__) console.warn('checkpoint failed', e);
     }
   }, []);
 

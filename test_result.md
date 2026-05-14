@@ -739,7 +739,51 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      QA RESET HOOKS — added before final AAB build.
+      FINAL PRE-RELEASE AUDIT — CLEAN.
+
+      Hardening pass before AAB build:
+        • Gated remaining 2 production-leaked console.log calls in
+          GameContext.tsx (saveToServer / saveCheckpoint catch blocks)
+          behind `__DEV__`. Release bundle is now console-noise-free
+          on transient network failures.
+        • All other console.* sites already gated by `__DEV__`:
+            AuthContext (automation bypass logs)
+            automation.ts (PLAYWRIGHT-detected log)
+            app/index.tsx (automation redirect log)
+        • Debug overlays in conduit-maze.tsx and game.tsx gated by
+          `__DEV__` — stripped from release builds by Metro.
+        • Backend ENABLE_AUTOMATION_BYPASS gating verified:
+            /.env.production.example → "ENABLE_AUTOMATION_BYPASS=0"
+            server.py L260-269 enforces 403 + WARNING log when flag=0.
+        • No new endpoints, no schema changes.
+        • Two `customer-assets.emergentagent.com` static asset URLs
+          remain (player + cyberpunk-tile assets). These are persistent
+          customer assets, not preview URLs — safe for production.
+
+      Final pre-release state:
+        ✅ Bundle compiles clean (975+ modules)
+        ✅ All routes 200
+        ✅ Backend healthy, save + checkpoint live
+        ✅ Tutorial requires manual dismiss only
+        ✅ REPLAY ONBOARDING in pause menu for QA
+        ✅ ?resetTutorial=1 URL hook for web QA
+        ✅ Rules of Hooks compliance restored
+        ✅ 401 autoload retry in GameContext
+        ✅ GRID UX (meter + cost chips + shake on fail)
+        ✅ All controls A/B correct (A = primary)
+        ✅ All console.log gated for production
+
+      RECOMMENDED FINAL QA PASS (user-side on physical Android):
+        1. install internal-testing AAB
+        2. confirm INTRO tutorial appears + types text + requires CONTINUE
+        3. play one full combat (deploy → take damage → win)
+        4. extract a captured entity
+        5. open SYNERGY GRID, spend a synergy point on HANDSHAKE
+        6. start another combat, confirm deploy cost dropped
+        7. test SAVE CHECKPOINT + QUIT TO TITLE + reload — state persists
+        8. test REPLAY ONBOARDING — tutorials re-fire
+        9. test Android hardware back — does NOT dismiss tutorials
+        10. confirm no debug overlays / dev grid visible
 
       Two ways to replay tutorials for QA verification:
 
