@@ -2196,3 +2196,68 @@ agent_communication:
       will now SHOW the actual error message on screen instead of
       killing the app — please paste that text back to us for the
       next round of debugging.
+
+---
+
+## 2026-05-14 — V1.0 RELEASE LOCKED · FEATURE FREEZE LIFTED · CLEARED FOR EAS BUILD
+
+  - agent: "main"
+    message: |
+      Final hardening pass complete. User has approved:
+      • Physical Device QA — CONDITIONAL PASS (current dev-state APK
+        crash attributed to missing expo-asset peer dep + dev env-var
+        in production AAB, both fixed)
+      • Security protocol — secrets-in-Deployment-Panel only, never
+        in eas.json / app.json / .env.production
+      • Feature freeze — OFFICIALLY LIFTED
+
+      Frozen final state:
+        /app/frontend/eas.json::build.production.env
+          NODE_ENV=production
+          ENABLE_AUTOMATION_BYPASS=0
+          EXPO_PUBLIC_BACKEND_URL=https://emerged-academy.emergent.host
+
+        /app/frontend/.env.production
+          EXPO_PUBLIC_BACKEND_URL=https://emerged-academy.emergent.host
+          NODE_ENV=production
+
+        /app/frontend/app.json
+          name=Synthetic Sparks
+          version=1.0.0
+          android.versionCode=1
+          android.targetSdkVersion=35
+          jsEngine=hermes
+          newArchEnabled=true
+          adaptiveIcon.backgroundColor=#000000 (schema-valid)
+          plugins=[expo-router, expo-splash-screen,
+                   expo-audio, expo-font, expo-build-properties,
+                   expo-asset]
+          permissions=[INTERNET, ACCESS_NETWORK_STATE, VIBRATE]
+          blocked=[RECORD_AUDIO, STORAGE, CAMERA, LOCATION]
+
+      Security audit: 0 secrets in any source-tracked file.
+      expo-doctor: 17/17 PASS.
+      Supervisor: backend / expo / mongodb all RUNNING.
+      Hardening shipped earlier this session:
+        - ErrorBoundary at root layout
+        - Try/catch + deep null-guards in game.tsx mount IIFE
+        - prefetchSheet BACKEND-URL guard
+
+      User to run on their local machine:
+        cd frontend
+        eas login
+        eas build:configure
+        eas build --platform android --profile production
+
+      Backend env (paste into Emergent Deployment Panel):
+        JWT_SECRET=<rotated 512-bit hex>
+        ADMIN_PASSWORD=<rotated 32-char>
+        NODE_ENV=production
+        ENABLE_AUTOMATION_BYPASS=0
+        FRONTEND_URL=https://emerged-academy.emergent.host
+        ADMIN_EMAIL=admin@syntheticsparks.app
+        MONGO_URL=<prod>
+        DB_NAME=synthetic_sparks
+
+      Next action: await AAB build → install on physical device →
+      Play Console Internal Testing track upload.
