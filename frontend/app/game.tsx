@@ -214,21 +214,34 @@ export default function GameScreen() {
 
   useEffect(() => {
     (async () => {
-      if (!user) return;
-      let s = state;
-      if (!s) s = await loadFromServer();
-      if (!s) {
-        router.replace('/character-create');
-        return;
-      }
-      let tx = s.world.position.x;
-      let ty = s.world.position.y;
-      // Safety: if saved checkpoint is now inside a wall (map redesign), respawn at entrance hall
-      if (!isFloor(tx, ty)) {
-        tx = 1;
-        ty = 13; // entrance hall
-        try { await setPosition(tx, ty); } catch {}
-      }
+      try {
+        if (!user) return;
+        let s = state;
+        if (!s) {
+          try { s = await loadFromServer(); } catch { s = null; }
+        }
+        if (!s) {
+          router.replace('/character-create');
+          return;
+        }
+        // ── PRODUCTION CRASH GUARD ─────────────────────────────────
+        // Older / corrupted saves may lack world / world.position. Without
+        // these guards, accessing s.world.position.x throws an unhandled
+        // exception in the async IIFE, which Hermes + new arch can promote
+        // to a native process kill ("App keeps stopping" Android dialog).
+        // Falls back to the entrance hall coordinates for any malformed save.
+        let tx = s?.world?.position?.x;
+        let ty = s?.world?.position?.y;
+        if (typeof tx !== 'number' || typeof ty !== 'number') {
+          tx = 1;
+          ty = 13;
+        }
+        // Safety: if saved checkpoint is now inside a wall (map redesign), respawn at entrance hall
+        if (!isFloor(tx, ty)) {
+          tx = 1;
+          ty = 13; // entrance hall
+          try { await setPosition(tx, ty); } catch {}
+        }
       posRef.current = { px: tx * TILE + TILE / 2, py: ty * TILE + TILE / 2 };
       // Initialise camera to the player so we don't pan-in from (0,0) on load.
       camRef.current = { x: posRef.current.px, y: posRef.current.py };
@@ -277,6 +290,15 @@ export default function GameScreen() {
       setTimeout(() => {
         if (!isCompleted('intro')) startSequence('intro');
       }, 700);
+      } catch (err) {
+        // ── PRODUCTION SAFETY NET ────────────────────────────────────
+        // Anything unhandled in the mount path is caught here so the
+        // native process is never killed by an unhandled async error.
+        // We log in DEV and gracefully kick the user back to the title
+        // so they can retry or pick NEW GAME.
+        if (__DEV__) console.error('[game.tsx] mount failed:', err);
+        try { router.replace('/'); } catch {}
+      }
     })();
   }, [user]);
 

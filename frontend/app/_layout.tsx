@@ -8,6 +8,7 @@ import { AuthProvider } from '../src/contexts/AuthContext';
 import { GameProvider } from '../src/contexts/GameContext';
 import { TutorialProvider } from '../src/contexts/TutorialContext';
 import { TutorialOverlay } from '../src/components/TutorialOverlay';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { ensureAudioMode } from '../src/utils/audio';
 import { resetTutorialState } from '../src/systems/tutorialState';
 
@@ -51,23 +52,25 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <GameProvider>
-          <TutorialProvider>
-            <StatusBar style="light" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: '#0a0a14' },
-                animation: 'fade',
-                animationDuration: 120,   // 0.12s — near-instant overworld→combat fade
-              }}
-            />
-            {/* Global tutorial overlay — rendered above every screen via Modal. */}
-            <TutorialOverlay />
-          </TutorialProvider>
-        </GameProvider>
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <GameProvider>
+            <TutorialProvider>
+              <StatusBar style="light" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: '#0a0a14' },
+                  animation: 'fade',
+                  animationDuration: 120,   // 0.12s — near-instant overworld→combat fade
+                }}
+              />
+              {/* Global tutorial overlay — rendered above every screen via Modal. */}
+              <TutorialOverlay />
+            </TutorialProvider>
+          </GameProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

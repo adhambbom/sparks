@@ -2145,3 +2145,54 @@ agent_communication:
 
       No backend changes. No new packages. Bundle compiles cleanly.
 
+
+---
+
+## 2026-05-14 — V1.0 CONTINUE CRASH HOTFIX (post-physical-QA report)
+
+  - agent: "main"
+    message: |
+      P0 CRASH REPORTED from physical-device QA on production AAB:
+      Pressing "CONTINUE" on title screen → native Android "Sparks
+      keeps stopping" dialog. RCA (troubleshoot_agent) identified
+      a cascading failure chain:
+
+      1) /app/frontend/.env.production does not exist → EAS production
+         build inherited .env which points to the PREVIEW backend URL.
+         Preview URL is gated to Emergent's environment and is NOT
+         reachable from a production Play Store installation.
+      2) loadFromServer() returns null silently → state stays null.
+      3) On CONTINUE, game.tsx mount useEffect accessed
+         `s.world.position.x` with no null guard.
+      4) Hermes + new architecture promoted the unhandled JS exception
+         to a native process kill.
+      5) No ErrorBoundary anywhere in the tree to catch it.
+
+      HOTFIXES APPLIED (defensive — no feature work):
+        a) Added try/catch around the entire mount IIFE in game.tsx
+           with deep null-guards on s.world.position
+        b) Added falls-back-to-entrance-hall coords (1,13) when save
+           is malformed
+        c) Created src/components/ErrorBoundary.tsx and wired it into
+           app/_layout.tsx wrapping all providers + Stack. Any future
+           render crash now shows a recoverable error screen with
+           selectable error text instead of killing the native process.
+        d) Hardened SheetSprite.prefetchSheet to early-return when
+           EXPO_PUBLIC_BACKEND_URL is missing, and to catch per-frame
+           Image.prefetch rejections.
+
+      Bundle: 978 modules — clean web build. Title screen renders
+      identically (verified via screenshot).
+
+      USER ACTION REQUIRED before re-build:
+        1) Create /app/frontend/.env.production pointing to the
+           DEPLOYED production backend URL (NOT the preview URL).
+        2) Deploy the FastAPI backend (Emergent native deploy ✅
+           ready — deployment_agent gave GREEN status).
+        3) Re-run `eas build --platform android --profile production`.
+        4) Reinstall the AAB and retry CONTINUE.
+
+      If CONTINUE still crashes after the rebuild, the ErrorBoundary
+      will now SHOW the actual error message on screen instead of
+      killing the app — please paste that text back to us for the
+      next round of debugging.

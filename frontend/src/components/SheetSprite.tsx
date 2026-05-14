@@ -104,13 +104,22 @@ export default function SheetSprite({
 /**
  * Eagerly prefetch every frame in a sheet so the first walk doesn't flicker.
  * Call once on mount of any screen that uses SheetSprite.
+ *
+ * Production safety: if EXPO_PUBLIC_BACKEND_URL is missing the URLs become
+ * "/api/static/..." which on native Android resolves to an invalid relative
+ * scheme. Image.prefetch then throws an unhandled promise rejection that
+ * Hermes + the new architecture can promote to a native process kill.
+ * The early-return below makes this a no-op when the env var is absent.
  */
 export function prefetchSheet(sheet: keyof typeof SHEETS = 'adhamb'): void {
+  if (!BACKEND) return;
   const def = SHEETS[sheet];
   (['up', 'down', 'left', 'right'] as Direction[]).forEach((d) => {
     ([0, 1, 2] as const).forEach((f) => {
-      const uri = def.pattern(d, f);
-      Image.prefetch?.(uri);
+      try {
+        const uri = def.pattern(d, f);
+        Image.prefetch?.(uri)?.catch?.(() => { /* swallow per-frame failures */ });
+      } catch { /* never crash on prefetch */ }
     });
   });
 }
