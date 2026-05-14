@@ -1268,6 +1268,22 @@ export default function GameScreen() {
             <PixelButton title="QUANTUM REGISTRY" onPress={() => { setPauseOpen(false); router.push('/registry'); }} color={COLORS.neonYellow} full />
             <View style={{ height: 8 }} />
             <PixelButton title="HOW TO PLAY" onPress={() => { setPauseOpen(false); router.push('/how-to-play'); }} color={COLORS.neonCyan} full />
+            <View style={{ height: 4 }} />
+            {/* QA-only: clear tutorial flags so onboarding replays on next refresh.
+                Production ships this button — it's a quality-of-life for any player
+                who skipped the intro and wants to revisit it. Tiny, neutral color. */}
+            <PixelButton
+              title="REPLAY ONBOARDING"
+              onPress={async () => {
+                const mod = await import('../src/systems/tutorialState');
+                await mod.resetTutorialState();
+                setPauseOpen(false);
+                // soft visual confirmation via existing log/alert if available
+                try { (router as any).replace('/'); } catch { /* silent */ }
+              }}
+              color={COLORS.textDim}
+              full
+            />
             <View style={{ height: 8 }} />
             <PixelButton title="SAVE CHECKPOINT" onPress={handleSave} color={COLORS.neonYellow} full />
             <View style={{ height: 8 }} />

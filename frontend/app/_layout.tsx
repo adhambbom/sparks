@@ -2,13 +2,14 @@ import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Platform } from 'react-native';
 import { useFonts, PressStart2P_400Regular } from '@expo-google-fonts/press-start-2p';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { GameProvider } from '../src/contexts/GameContext';
 import { TutorialProvider } from '../src/contexts/TutorialContext';
 import { TutorialOverlay } from '../src/components/TutorialOverlay';
 import { ensureAudioMode } from '../src/utils/audio';
+import { resetTutorialState } from '../src/systems/tutorialState';
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -19,6 +20,25 @@ export default function RootLayout() {
   // background behaviour). No-op on web.
   useEffect(() => {
     ensureAudioMode();
+  }, []);
+
+  // ── QA RESET HOOK ─────────────────────────────────────────────────
+  // Append `?resetTutorial=1` to the URL (web) OR set the deep-link
+  // param in a development build to wipe the AsyncStorage tutorial
+  // flag set. Useful for verifying onboarding pacing on each new
+  // device without uninstalling the app.
+  // The hook only runs on web for now — it's the only place a URL
+  // query is reliably visible without expo-router navigation hooks.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    try {
+      const url = typeof window !== 'undefined' ? window.location?.search ?? '' : '';
+      if (url.includes('resetTutorial=1')) {
+        void resetTutorialState();
+        // eslint-disable-next-line no-console
+        console.log('[Sparks] Tutorial flags cleared via ?resetTutorial=1');
+      }
+    } catch { /* silent — non-critical */ }
   }, []);
 
   if (!fontsLoaded) {

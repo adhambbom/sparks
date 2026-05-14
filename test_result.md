@@ -739,7 +739,33 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      TUTORIAL UX FIX — no more accidental dismissal + typewriter polish.
+      QA RESET HOOKS — added before final AAB build.
+
+      Two ways to replay tutorials for QA verification:
+
+      1. WEB QA: URL query param
+         Append `?resetTutorial=1` to any URL (e.g. the home page or
+         the Emergent preview). On mount, _layout.tsx calls
+         `resetTutorialState()` which wipes the AsyncStorage flag
+         `sparks.tutorial.v1`. Next route render fires all the
+         tutorial triggers fresh.
+
+      2. ANDROID / NATIVE: in-game button
+         Pause menu now has a new entry:
+            REPLAY ONBOARDING (dim grey, between HOW TO PLAY and SAVE)
+         Tapping it wipes the same AsyncStorage key and bounces the
+         player back to the title screen so the intro NETWORK CONTACT
+         prompt fires again.
+
+      Verified:
+        • Bundle compiles clean.
+        • All routes 200.
+        • Backend healthy (save + checkpoint posting).
+        • No regression in the SystemPrompt no-auto-dismiss behavior.
+
+      Build is approved for `eas build --platform android --profile production`.
+      Onboarding can now be re-verified on any test device by either
+      method above.
 
       Root cause:
         • The original SystemPrompt had a full-screen Pressable backdrop
