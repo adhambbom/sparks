@@ -35,7 +35,8 @@
       "channel": "production",
       "env": {
         "NODE_ENV": "production",
-        "ENABLE_AUTOMATION_BYPASS": "0"
+        "ENABLE_AUTOMATION_BYPASS": "0",
+        "EXPO_PUBLIC_BACKEND_URL": "https://emerged-academy.emergent.host"
       },
       "android": {
         "buildType": "app-bundle",
