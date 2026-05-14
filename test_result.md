@@ -739,7 +739,81 @@ backend_smoke:
 agent_communication:
   - agent: "main"
     message: |
-      POWER GRID UX OVERHAUL + TUTORIAL A/B FIX.
+      TUTORIAL UX FIX — no more accidental dismissal + typewriter polish.
+
+      Root cause:
+        • The original SystemPrompt had a full-screen Pressable backdrop
+          that called dismiss(). Players touching anywhere on screen
+          while reading would instantly close the prompt — this was the
+          "popups disappear too quickly" complaint.
+
+      Rewrite (src/components/SystemPrompt.tsx):
+        • Backdrop is now an INERT View — captures touches to pause
+          gameplay underneath but does NOT dismiss the modal.
+        • Android BackHandler is swallowed while the prompt is open
+          (hardware back can't dismiss either).
+        • onRequestClose is a no-op — Modal can ONLY be closed via the
+          CONTINUE button.
+        • NO timer-based auto-close anywhere in the file.
+
+      Polish added (per the spec's optional list):
+        • Typewriter reveal — body characters stream in ~22ms each so
+          the prompt feels intentional and reads at a comfortable pace.
+        • Blinking ▌ typing cursor at the end of the latest line during
+          typewriter; switches to a ▶ blinking cursor next to the
+          CONTINUE hint once typing completes.
+        • Pulsing border glow (subtle 1.2s loop) — modal feels alive
+          without any auto-advance.
+        • Soft sfx.confirm() beep on appear; sfx.click() on tap.
+        • CONTINUE button doubles as "skip type" — first tap reveals
+          all text instantly, second tap dismisses. Title changes from
+          "SKIP TYPE" → "CONTINUE" once typewriter finishes.
+        • Larger font (size 10 with 16 line-height) for body text.
+        • Locked card minHeight on body so the card doesn't jitter as
+          characters stream in.
+        • Card width 94%, max 400 — mobile-responsive scaling.
+
+      Verified:
+        • Bundle clean, all routes 200.
+        • Backend healthy.
+        • Existing trigger wiring in game.tsx + combat.tsx unchanged —
+          all 10 tutorial flags still fire at the correct moments.
+
+      Two critical fixes shipped:
+
+      1. Rules of Hooks (app/combat.tsx):
+         • The `if (!state || !enemyData) return <Loading/>` at line 226
+           sat BEFORE multiple later useEffect calls. When GameContext
+           autoload populated state mid-mount the second render had MORE
+           hooks → "Rendered more hooks than during the previous render".
+         • Fix: removed the early return; relocated the loading guard
+           to the JSX render path (L1068). All hooks now precede every
+           return. Safe `player = state?.player ?? defaults` so later
+           hooks can read it even while state is null.
+
+      2. Auth autoload (src/contexts/GameContext.tsx):
+         • Hard-refresh of any sub-route (/operator-framework, /combat,
+           /skills) hung on "Loading…" because the auth cookie wasn't
+           live yet → /character/me 401 → load failed silently.
+         • Fix: loadFromServer() now catches 401, calls
+           POST /auth/automation-bypass, retries /character/me. Same
+           pattern as the cookies-not-yet-rehydrated case in production.
+
+      3. Operator Framework hooks fix (app/operator-framework.tsx):
+         • Same root-cause precaution: moved all useMemo above the
+           early-return; memo inputs use `player?.synergyNodes ?? []`.
+
+      VERIFICATION (frontend testing agent, 390×844 viewport):
+        ✅ /operator-framework — initial + refresh both clean, all 5 branch
+           tabs render, no red-screen.
+        ✅ /combat — initial + refresh clean, full HUD with STAB/GRID
+           labeled bars + action grid.
+        ✅ / (overworld) — clean, all HUD shortcuts intact.
+        ✅ Tutorial INTERFACE BOUND copy source-confirmed at L43-52:
+           "D-PAD moves. A = primary action."
+        ✅ Zero "Rendered more hooks" console errors across all routes.
+
+      Build is approved for `eas build --platform android --profile production`.
 
       Tutorial copy fix (src/data/tutorialPrompts.ts):
         • controls_tip + combat_basics now correctly say

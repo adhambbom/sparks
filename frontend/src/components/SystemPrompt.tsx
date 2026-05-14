@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, View, Easing } from 'react-native';
+import { Animated, Modal, StyleSheet, View, Easing, BackHandler, Platform } from 'react-native';
 import { COLORS } from '../data/gameData';
 import { PixelText } from './PixelText';
 import { PixelButton } from './PixelButton';
@@ -10,26 +10,33 @@ import { TUTORIAL_PROMPTS } from '../data/tutorialPrompts';
 /**
  * SystemPrompt — universal tutorial modal.
  *
- * Game code triggers this with `<SystemPrompt flag="deploy_primer" />`.
- * The component:
- *   1. Reads the AsyncStorage flag set on mount.
- *   2. If unseen, renders an eerie terminal-style card.
- *   3. On dismiss, persists the flag and fades out.
+ * UX rules (per the onboarding spec, post-feedback):
+ *   • NO auto-close, NO timer-based dismiss, NO backdrop-press dismiss.
+ *     Player MUST tap the CONTINUE button to advance.
+ *   • Pauses gameplay input by sitting on top of everything in a Modal.
+ *   • Typewriter effect on the body so the prompt feels intentional.
+ *   • Blinking ▌ cursor on the CONTINUE button while idle.
+ *   • Soft confirm beep when the prompt appears.
+ *   • Large readable text, mobile-responsive padding, locked button size.
  *
- * Design rules per the onboarding spec:
- *   • Short readable prompts (lines clamped in tutorialPrompts.ts).
- *   • Eerie cyber terminal aesthetic — green prefix line, neon title,
- *     dotted scanline border.
- *   • Mobile-friendly: 90% width, large CONTINUE button.
- *   • Non-blocking — game pauses behind it but UX never gets stuck.
+ * Triggers self-gate via AsyncStorage so each flag fires exactly once
+ * across all sessions.
  */
 export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
   const [visible, setVisible] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.95)).current;
-
-  // Scanline / cursor blink — sells the "syncing into a network" tone.
+  // Blinking ▌ cursor on the CONTINUE button — also used as the
+  // typewriter cursor while text is animating in.
   const blink = useRef(new Animated.Value(0)).current;
+  // Subtle glow pulse on the card border so the modal feels alive
+  // without auto-advancing.
+  const glowPulse = useRef(new Animated.Value(0)).current;
+  // Number of characters currently revealed by the typewriter.
+  const [revealed, setRevealed] = useState(0);
+  // True once the typewriter has finished — gates the CONTINUE button
+  // so the player can't double-tap through a prompt without reading.
+  const [typingDone, setTypingDone] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -44,26 +51,79 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
     return () => { mounted = false; };
   }, [flag]);
 
+  // Open animation + cursor blink + glow pulse
   useEffect(() => {
     if (!visible) return;
+    setRevealed(0);
+    setTypingDone(false);
     Animated.parallel([
       Animated.timing(opacity, { toValue: 1, duration: 280, useNativeDriver: true }),
       Animated.timing(scale, { toValue: 1, duration: 280, easing: Easing.out(Easing.quad), useNativeDriver: true }),
     ]).start();
     Animated.loop(
       Animated.sequence([
-        Animated.timing(blink, { toValue: 1, duration: 480, useNativeDriver: true }),
-        Animated.timing(blink, { toValue: 0, duration: 480, useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 1, duration: 460, useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 0, duration: 460, useNativeDriver: true }),
       ]),
     ).start();
-  }, [visible, opacity, scale, blink]);
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowPulse, { toValue: 1, duration: 1200, useNativeDriver: false }),
+        Animated.timing(glowPulse, { toValue: 0, duration: 1200, useNativeDriver: false }),
+      ]),
+    ).start();
+  }, [visible, opacity, scale, blink, glowPulse]);
+
+  // ── TYPEWRITER ──────────────────────────────────────────────────
+  // Reveals one character per ~22ms. Fully readable on the slowest
+  // mobile; player can tap CONTINUE-to-skip-typewriter once we set
+  // typingDone false → tap reveals everything instantly.
+  const fullText = visible
+    ? TUTORIAL_PROMPTS[flag].body.join('\n')
+    : '';
+
+  useEffect(() => {
+    if (!visible) return;
+    if (revealed >= fullText.length) {
+      setTypingDone(true);
+      return;
+    }
+    const id = setTimeout(() => {
+      setRevealed((r) => r + 1);
+      // Soft tick on punctuation/space — lightweight; uses existing click sfx
+      const ch = fullText[revealed];
+      if (ch && (ch === '.' || ch === ',' || ch === '·')) {
+        // intentional pause beat — no sound to avoid spam
+      }
+    }, 22);
+    return () => clearTimeout(id);
+  }, [visible, revealed, fullText]);
+
+  // Android back button should NOT dismiss the modal — player must
+  // press CONTINUE. We swallow the back press while a tutorial is open.
+  useEffect(() => {
+    if (!visible) return;
+    if (Platform.OS !== 'android') return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => sub.remove();
+  }, [visible]);
 
   if (!visible) return null;
 
   const prompt = TUTORIAL_PROMPTS[flag];
   const accent = prompt.color ?? COLORS.neonCyan;
 
-  const dismiss = async () => {
+  // CONTINUE handler — also doubles as "reveal-all" if typewriter
+  // hasn't finished yet (mobile-friendly tap-to-skip).
+  const handleContinue = async () => {
+    if (!typingDone) {
+      // First tap: reveal everything instantly. Player must tap again
+      // to actually advance — keeps onboarding deliberate.
+      setRevealed(fullText.length);
+      setTypingDone(true);
+      sfx.click();
+      return;
+    }
     sfx.click();
     await markTutorialShown(flag);
     Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
@@ -71,20 +131,38 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
     });
   };
 
+  // Body rendered as the typewriter slice; split back into lines so
+  // formatting stays clean and we can show the typing cursor at the end.
+  const visibleBody = fullText.slice(0, revealed);
+  const visibleLines = visibleBody.split('\n');
+
+  const borderGlow = glowPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.45, 0.85],
+  });
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="none"
-      onRequestClose={dismiss}
+      onRequestClose={() => { /* swallow — no backdrop dismiss */ }}
       statusBarTranslucent
     >
       <Animated.View style={[styles.backdrop, { opacity }]} pointerEvents="auto">
-        <Pressable style={StyleSheet.absoluteFill} onPress={dismiss} />
+        {/* Inert backdrop — captures touches so gameplay underneath
+            is fully paused, but does NOT dismiss the prompt. */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="auto" />
+
         <Animated.View
           style={[
             styles.card,
-            { borderColor: accent, transform: [{ scale }], shadowColor: accent },
+            {
+              borderColor: accent,
+              transform: [{ scale }],
+              shadowColor: accent,
+              shadowOpacity: borderGlow as any,
+            },
           ]}
         >
           {/* Top prefix line — muted green terminal cursor. */}
@@ -100,12 +178,12 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
           {/* Title */}
           <View style={styles.titleRow}>
             {prompt.glyph && (
-              <PixelText size={18} color={accent} bold glow style={{ marginRight: 6 }}>
+              <PixelText size={20} color={accent} bold glow style={{ marginRight: 6 }}>
                 {prompt.glyph}
               </PixelText>
             )}
             <View style={{ flex: 1 }}>
-              <PixelText size={16} color={accent} bold glow autoFit>
+              <PixelText size={17} color={accent} bold glow autoFit>
                 {prompt.title}
               </PixelText>
             </View>
@@ -114,19 +192,46 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
           {/* Scan-line divider */}
           <View style={[styles.divider, { backgroundColor: accent }]} />
 
-          {/* Body lines */}
+          {/* Body — typewriter reveal, fixed minHeight so the card doesn't
+              jitter as text fills in. Larger font + tighter line-height for
+              mobile readability. */}
           <View style={styles.body}>
-            {prompt.body.map((line, i) => (
-              <PixelText key={i} size={9} color={COLORS.text} style={{ lineHeight: 14 }}>
-                {line}
-              </PixelText>
+            {visibleLines.map((line, i) => (
+              <View key={i} style={{ flexDirection: 'row' }}>
+                <PixelText size={10} color={COLORS.text} style={styles.bodyLine}>
+                  {line}
+                </PixelText>
+                {/* Show typing cursor at the END of the latest line only */}
+                {!typingDone && i === visibleLines.length - 1 && (
+                  <Animated.Text style={[styles.typingCursor, { opacity: blink, color: accent }]}>
+                    ▌
+                  </Animated.Text>
+                )}
+              </View>
+            ))}
+            {/* Pad to full body height so CONTINUE doesn't jump up/down */}
+            {Array.from({ length: Math.max(0, prompt.body.length - visibleLines.length) }).map((_, i) => (
+              <View key={`pad-${i}`} style={{ height: 14 }} />
             ))}
           </View>
 
-          {/* Footer */}
+          {/* Footer — locked CONTINUE button, large touch target */}
           <View style={styles.footer}>
-            <PixelText size={7} color="#5a6072">{'> ack_to_continue_'}</PixelText>
-            <PixelButton title="CONTINUE" onPress={dismiss} color={accent} size="sm" testID={`tut-${flag}-ack`} />
+            <View style={styles.footerHint}>
+              <Animated.Text style={[styles.continueCursor, { opacity: blink, color: accent }]}>
+                ▶
+              </Animated.Text>
+              <PixelText size={8} color="#5a6072" style={{ marginLeft: 4 }}>
+                {typingDone ? 'tap CONTINUE to proceed' : 'tap to skip typing'}
+              </PixelText>
+            </View>
+            <PixelButton
+              title={typingDone ? 'CONTINUE' : 'SKIP TYPE'}
+              onPress={handleContinue}
+              color={accent}
+              size="md"
+              testID={`tut-${flag}-ack`}
+            />
           </View>
         </Animated.View>
       </Animated.View>
@@ -137,33 +242,55 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.78)',
+    backgroundColor: 'rgba(0,0,0,0.82)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
   },
   card: {
-    width: '92%',
-    maxWidth: 380,
-    backgroundColor: 'rgba(6,8,14,0.96)',
+    width: '94%',
+    maxWidth: 400,
+    backgroundColor: 'rgba(6,8,14,0.97)',
     borderWidth: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    shadowOpacity: 0.55,
-    shadowRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 0 },
-    gap: 8,
+    gap: 10,
   },
   prefixRow: { flexDirection: 'row', alignItems: 'center' },
-  cursor: { marginLeft: 4, fontFamily: 'PressStart2P_400Regular', fontSize: 10 },
+  cursor: {
+    marginLeft: 4,
+    fontFamily: 'PressStart2P_400Regular',
+    fontSize: 10,
+  },
   titleRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  divider: { height: 1, opacity: 0.4 },
-  body: { gap: 4, paddingVertical: 4 },
+  divider: { height: 1, opacity: 0.5 },
+  body: {
+    gap: 4,
+    paddingVertical: 6,
+    minHeight: 64,
+  },
+  bodyLine: { lineHeight: 16 },
+  typingCursor: {
+    marginLeft: 2,
+    fontFamily: 'PressStart2P_400Regular',
+    fontSize: 10,
+  },
   footer: {
-    marginTop: 4,
+    marginTop: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  footerHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 1,
+  },
+  continueCursor: {
+    fontFamily: 'PressStart2P_400Regular',
+    fontSize: 10,
   },
 });
