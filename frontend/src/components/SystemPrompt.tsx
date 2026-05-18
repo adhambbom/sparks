@@ -29,9 +29,15 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
   // Blinking ▌ cursor on the CONTINUE button — also used as the
   // typewriter cursor while text is animating in.
   const blink = useRef(new Animated.Value(0)).current;
-  // Subtle glow pulse on the card border so the modal feels alive
-  // without auto-advancing.
-  const glowPulse = useRef(new Animated.Value(0)).current;
+  // ── NOTE on the removed glowPulse ─────────────────────────────────
+  // We previously animated `shadowOpacity` via a JS-driven `glowPulse`
+  // Animated.Value, but mixing JS-driven and native-driven animations
+  // inside the same Animated.View (alongside the native `scale`
+  // transform) crashes Hermes + the new architecture with:
+  //   "Attempting to run JS driven animation on animated node that
+  //    has been moved to 'native' earlier"
+  // The pulse was purely decorative — keeping it static keeps the
+  // card looking great without the runtime conflict.
   // Number of characters currently revealed by the typewriter.
   const [revealed, setRevealed] = useState(0);
   // True once the typewriter has finished — gates the CONTINUE button
@@ -66,13 +72,8 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
         Animated.timing(blink, { toValue: 0, duration: 460, useNativeDriver: true }),
       ]),
     ).start();
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowPulse, { toValue: 1, duration: 1200, useNativeDriver: false }),
-        Animated.timing(glowPulse, { toValue: 0, duration: 1200, useNativeDriver: false }),
-      ]),
-    ).start();
-  }, [visible, opacity, scale, blink, glowPulse]);
+    // glowPulse loop removed — see comment near the declarations.
+  }, [visible, opacity, scale, blink]);
 
   // ── TYPEWRITER ──────────────────────────────────────────────────
   // Reveals one character per ~22ms. Fully readable on the slowest
@@ -136,10 +137,9 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
   const visibleBody = fullText.slice(0, revealed);
   const visibleLines = visibleBody.split('\n');
 
-  const borderGlow = glowPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 0.85],
-  });
+  // Static border-glow opacity — replaces the previous JS-driven
+  // glowPulse interpolation (see notes near declarations).
+  const STATIC_BORDER_GLOW = 0.7;
 
   return (
     <Modal
@@ -161,7 +161,7 @@ export function SystemPrompt({ flag }: { flag: TutorialFlag }) {
               borderColor: accent,
               transform: [{ scale }],
               shadowColor: accent,
-              shadowOpacity: borderGlow as any,
+              shadowOpacity: STATIC_BORDER_GLOW,
             },
           ]}
         >
