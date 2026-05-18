@@ -1,0 +1,162 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Synthetic Sparks — EAS Build Workflow
+# ─────────────────────────────────────────────────────────────────────────
+# Triggers cloud EAS builds for Android (and optionally iOS) without
+# needing a local machine. The resulting build page on expo.dev exposes a
+# public Install URL you can share with testers.
+#
+# HOW TO USE
+#   1. Save this project to GitHub (already done if you're seeing this).
+#   2. On https://expo.dev → your account → Access Tokens → generate a
+#      new token with `BUILD` scope.
+#   3. In GitHub: repo → Settings → Secrets and variables → Actions →
+#      New repository secret → name=EXPO_TOKEN, value=<your token>.
+#   4a. AUTO mode — push to `main` to trigger an Android production build.
+#   4b. MANUAL mode — GitHub → Actions tab → "EAS Build" → Run workflow
+#       → pick platform + profile → Run.
+#   5. When the build finishes, expo.dev sends you an email with the
+#      Internal Distribution install URL — share that link with friends.
+# ─────────────────────────────────────────────────────────────────────────
+
+name: EAS Build
+
+on:
+  # Auto-build on every push to main that touches the frontend.
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/eas-build.yml'
+
+  # Manual one-click builds from the Actions tab.
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Build platform'
+        required: true
+        default: 'android'
+        type: choice
+        options:
+          - android
+          - ios
+          - all
+      profile:
+        description: 'EAS profile (must exist in eas.json)'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+      wait_for_completion:
+        description: 'Wait for the build to finish (longer run, but install URL appears here)'
+        required: false
+        default: false
+        type: boolean
+
+# Cancel any in-flight build for the same branch when a new commit arrives.
+concurrency:
+  group: eas-build-${{ github.ref }}
+  cancel-in-progress: false   # do NOT kill long EAS builds mid-flight
+
+jobs:
+  build:
+    name: Build (${{ github.event.inputs.platform || 'android' }} / ${{ github.event.inputs.profile || 'production' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Full history is not needed; shallow clone keeps cold-starts fast.
+          fetch-depth: 1
+
+      # ── Node + Yarn ─────────────────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      # ── EAS CLI ─────────────────────────────────────────────────────
+      - name: Setup Expo + EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      # ── Install deps ────────────────────────────────────────────────
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+
+      # ── Sanity-check the config ─────────────────────────────────────
+      - name: Run expo-doctor (config sanity check)
+        run: npx expo-doctor || true
+        # Use `|| true` so a non-blocking warning doesn't kill the build.
+        # Remove the `|| true` if you want a STRICT 17/17 PASS gate.
+
+      # ── Verify no secrets leaked into source ────────────────────────
+      - name: Audit committed files for secret leaks
+        run: |
+          set -e
+          echo "→ Scanning app.json + eas.json + .env.production for secrets…"
+          if grep -iEn 'jwt_secret|admin_password' app.json eas.json .env.production 2>/dev/null; then
+            echo "❌ CRITICAL: Secret literal found in a source-tracked file."
+            exit 1
+          fi
+          echo "✅ No secrets in source-tracked files."
+
+      # ── Print the resolved build profile (debug aid) ────────────────
+      - name: Print resolved EAS build profile
+        run: |
+          PROFILE="${{ github.event.inputs.profile || 'production' }}"
+          echo "Resolved profile: $PROFILE"
+          node -e "const p=require('./eas.json').build['$PROFILE']; console.log(JSON.stringify(p, null, 2));"
+
+      # ── The actual build ────────────────────────────────────────────
+      # `--non-interactive` is REQUIRED in CI.
+      # `--no-wait` returns the build URL immediately so the workflow stays cheap.
+      # Pass `wait_for_completion=true` from the manual trigger to block here.
+      - name: Trigger EAS Build
+        env:
+          PLATFORM: ${{ github.event.inputs.platform || 'android' }}
+          PROFILE: ${{ github.event.inputs.profile || 'production' }}
+          WAIT: ${{ github.event.inputs.wait_for_completion || 'false' }}
+        run: |
+          set -e
+          if [ "$WAIT" = "true" ]; then
+            echo "→ Building $PLATFORM / $PROFILE (waiting for completion)…"
+            eas build --platform "$PLATFORM" --profile "$PROFILE" --non-interactive
+          else
+            echo "→ Building $PLATFORM / $PROFILE (fire-and-forget)…"
+            eas build --platform "$PLATFORM" --profile "$PROFILE" --non-interactive --no-wait
+          fi
+
+      # ── Post a friendly summary ─────────────────────────────────────
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### EAS Build Triggered 🚀"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Platform | ${{ github.event.inputs.platform || 'android' }} |"
+            echo "| Profile  | ${{ github.event.inputs.profile  || 'production' }} |"
+            echo "| Commit   | ${{ github.sha }} |"
+            echo "| Triggered by | ${{ github.actor }} |"
+            echo ""
+            echo "📬 When the build finishes, **expo.dev will email you the install link**."
+            echo "Or open https://expo.dev/accounts/<your-account>/projects/synthetic-sparks/builds to grab it directly."
+          } >> "$GITHUB_STEP_SUMMARY"
