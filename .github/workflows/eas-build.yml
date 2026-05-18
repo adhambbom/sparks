@@ -97,8 +97,19 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       # ── Install deps ────────────────────────────────────────────────
+      # We try `--frozen-lockfile` first (deterministic CI behaviour),
+      # but fall back to a normal install if yarn.lock is missing from
+      # the repo (Emergent's "Save to GitHub" push sometimes drops
+      # lockfiles when total payload exceeds an internal limit).
       - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
+        run: |
+          if [ -f yarn.lock ]; then
+            echo "→ yarn.lock present, using --frozen-lockfile"
+            yarn install --frozen-lockfile --network-timeout 600000
+          else
+            echo "⚠  yarn.lock missing — falling back to normal install"
+            yarn install --network-timeout 600000
+          fi
 
       # ── Sanity-check the config ─────────────────────────────────────
       - name: Run expo-doctor (config sanity check)
