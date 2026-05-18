@@ -82,12 +82,17 @@ jobs:
           fetch-depth: 1
 
       # ── Node + Yarn ─────────────────────────────────────────────────
+      # NOTE: cache:'yarn' is intentionally OMITTED. setup-node@v4
+      # hard-fails if cache-dependency-path resolves to nothing, and
+      # Emergent's "Save to GitHub" push sometimes drops yarn.lock.
+      # Cold installs add ~30s — well worth not having the workflow
+      # fail before it can even start. Re-enable caching later via:
+      #   cache: 'yarn'
+      #   cache-dependency-path: frontend/yarn.lock
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'yarn'
-          cache-dependency-path: frontend/yarn.lock
 
       # ── EAS CLI ─────────────────────────────────────────────────────
       - name: Setup Expo + EAS CLI
