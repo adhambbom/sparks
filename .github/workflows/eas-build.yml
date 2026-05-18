@@ -140,6 +140,25 @@ jobs:
           echo "Resolved profile: $PROFILE"
           node -e "const p=require('./eas.json').build['$PROFILE']; console.log(JSON.stringify(p, null, 2));"
 
+      # ── Auto-init EAS project linkage (first-build only) ────────────
+      # If extra.eas.projectId is empty / placeholder, `eas init` reads
+      # the repo's owner from EXPO_TOKEN and creates / links the project
+      # non-interactively. Subsequent runs detect a real projectId and
+      # skip this step. This was the #2 most common first-run failure.
+      - name: Ensure EAS project is linked
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          PID=$(node -e "try { console.log(require('./app.json').expo.extra?.eas?.projectId || '') } catch { console.log('') }")
+          if [ -z "$PID" ] || [ "$PID" = "REPLACE_WITH_YOUR_EAS_PROJECT_ID" ]; then
+            echo "→ projectId missing in app.json — running eas init (non-interactive)"
+            eas init --non-interactive --force || true
+            echo "→ Resolved projectId:"
+            node -e "console.log(require('./app.json').expo.extra?.eas?.projectId || '(still missing)')"
+          else
+            echo "→ projectId already set: $PID"
+          fi
+
       # ── The actual build ────────────────────────────────────────────
       # `--non-interactive` is REQUIRED in CI.
       # `--no-wait` returns the build URL immediately so the workflow stays cheap.
