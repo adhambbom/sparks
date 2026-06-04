@@ -104,6 +104,23 @@ export const FACTION_PASSIVE: Record<FactionId, FactionPassive> = {
     glyph: '',
     color: '#888',
   },
+  // Non-deployable factions — neutral fallbacks (never reached via SPECIES_KIT).
+  npc_friendly: {
+    kind: 'none',
+    name: '—',
+    flavor: '',
+    effectText: '',
+    glyph: '',
+    color: '#888',
+  },
+  boss: {
+    kind: 'none',
+    name: '—',
+    flavor: '',
+    effectText: '',
+    glyph: '',
+    color: '#888',
+  },
 };
 
 export const SIGNATURE_BY_FACTION: Record<FactionId, EntitySignature> = {
@@ -151,6 +168,23 @@ export const SIGNATURE_BY_FACTION: Record<FactionId, EntitySignature> = {
   },
   // Player fallback — never deployed but kept for type safety.
   player: {
+    id: 'sig_operator_strike',
+    name: 'OPERATOR STRIKE',
+    flavor: 'Direct manual override. Rare but precise.',
+    power: 1.30,
+    glyph: '⌬',
+    color: '#5cb3ff',
+  },
+  // Non-deployable factions — fallbacks (never reached via SPECIES_KIT).
+  npc_friendly: {
+    id: 'sig_operator_strike',
+    name: 'OPERATOR STRIKE',
+    flavor: 'Direct manual override. Rare but precise.',
+    power: 1.30,
+    glyph: '⌬',
+    color: '#5cb3ff',
+  },
+  boss: {
     id: 'sig_operator_strike',
     name: 'OPERATOR STRIKE',
     flavor: 'Direct manual override. Rare but precise.',
@@ -210,6 +244,14 @@ export const TRAIT_BY_ROLE: Record<MinionRole, EntityTrait> = {
     effectText: 'First minion skill this fight deals +50% damage.',
     color: '#ff7aa8',
     glyph: '⌬',
+  },
+  swarm: {
+    id: 'trait_overrun',
+    name: 'OVERRUN',
+    flavor: 'Cheap chassis, endless count. They keep coming.',
+    effectText: 'Basic attacks apply a stacking bleed on hit.',
+    color: '#9cff5c',
+    glyph: '◇',
   },
 };
 
