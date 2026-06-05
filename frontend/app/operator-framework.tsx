@@ -113,6 +113,18 @@ export default function OperatorFrameworkScreen() {
 
   const selected = selectedNode ? SYNERGY_NODES.find((n) => n.id === selectedNode) ?? null : null;
 
+  // Purchase a synergy node. Validation (prereq / level / points) is done
+  // by the disabled state on the button + unlockSynergyNode's internal guard.
+  const onUnlock = (id: string) => {
+    const ok = unlockSynergyNode(id);
+    if (ok) {
+      sfx.confirm();
+      void saveToServer();
+    } else {
+      sfx.cancel();
+    }
+  };
+
   // ── NOW it is safe to early-return: all hooks above are unconditional.
   if (!state || !player) {
     return (
