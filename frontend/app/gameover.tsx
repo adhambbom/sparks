@@ -35,7 +35,7 @@ export default function GameOverScreen() {
       <View style={styles.glitchBg} />
       <View style={styles.center}>
         <PixelText size={10} color={COLORS.neonRed} style={{ marginBottom: 10, opacity: pulse > 50 ? 1 : 0.3 }}>
-          // SIGNAL_LOST //
+          {'// SIGNAL_LOST //'}
         </PixelText>
         <PixelText size={48} color={COLORS.neonRed} glow bold style={styles.title}>GAME</PixelText>
         <PixelText size={48} color={COLORS.neonRed} glow bold style={styles.title}>OVER</PixelText>
