@@ -414,6 +414,12 @@ export type Enemy = {
   weakness?: Element;
   resist?: Element;
   tier: 1 | 2 | 3 | 4; // difficulty tier
+  /** Marks tier-4 multi-phase encounters; drives boss-specific combat UI. */
+  isBoss?: boolean;
+  /** Extra ability ids unlocked once the boss enters its enraged phase. */
+  phaseAbilities?: string[];
+  /** Barked line shown when the boss transitions into its next phase. */
+  phaseQuote?: string;
   drops?: { itemId: string; chance: number }[];
 };
 
