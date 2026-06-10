@@ -129,6 +129,14 @@ export default function OperatorFrameworkScreen() {
     );
   }
 
+  const onUnlock = (id: string) => {
+    sfx.click();
+    if (unlockSynergyNode(id)) {
+      saveToServer();
+      setSelectedNode(null);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* ── HEADER ─────────────────────────────────────────────── */}
