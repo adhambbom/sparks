@@ -40,17 +40,19 @@ export type GameState = {
   // ─── Quantum Taming slice ─────────────────────────────────────────
   // Optional so existing saves load without migration. Read sites use
   // `?? []` to default when absent.
-  quantum?: {
-    /** Up to MAX_PARTY (6) actively deployable minions. */
-    party: CapturedMinion[];
-    /** Overflow when party is full \u2014 lives on the server, hot-swappable. */
-    extendedStorage: CapturedMinion[];
-    /** Species ids ever encountered (whether captured or not). */
-    seenSpecies: string[];
-    /** Species ids captured at least once \u2014 derived but cached for speed. */
-    capturedSpecies: string[];
-  };
+  quantum?: QuantumState;
   lastSaved?: string;
+};
+
+export type QuantumState = {
+  /** Up to MAX_PARTY (6) actively deployable minions. */
+  party: CapturedMinion[];
+  /** Overflow when party is full \u2014 lives on the server, hot-swappable. */
+  extendedStorage: CapturedMinion[];
+  /** Species ids ever encountered (whether captured or not). */
+  seenSpecies: string[];
+  /** Species ids captured at least once \u2014 derived but cached for speed. */
+  capturedSpecies: string[];
 };
 
 type GameCtx = {
@@ -69,10 +71,12 @@ type GameCtx = {
   addGold: (amount: number) => void;
   awardXp: (xp: number) => boolean; // returns true if leveled up
   unlockAbility: (id: string) => void;
+  unlockSynergyNode: (id: string) => boolean;
   equip: (slot: 'weapon' | 'armor', itemId: string) => void;
   setPosition: (x: number, y: number) => void;
   // ─── Quantum Taming ──────────────────────────────────────────────
   addCapturedMinion: (m: CapturedMinion) => { slot: 'party' | 'extended' };
+  awardEntityXp: (uid: string, amount: number) => { leveled: boolean; gained: number; level: number };
   markSpeciesSeen: (speciesId: string) => void;
   swapPartyMinion: (partyIndex: number, storageIndex: number) => void;
   releaseMinion: (uid: string) => void;
@@ -332,7 +336,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // ─── Quantum Taming mutations ──────────────────────────────────────
   // Lazy-initialise the `quantum` slice so legacy saves work without
   // a backend migration step. All readers also fall back via `?? []`.
-  const ensureQuantum = (s: GameState): GameState['quantum'] =>
+  const ensureQuantum = (s: GameState): QuantumState =>
     s.quantum ?? { party: [], extendedStorage: [], seenSpecies: [], capturedSpecies: [] };
 
   const addCapturedMinion = (m: CapturedMinion): { slot: 'party' | 'extended' } => {

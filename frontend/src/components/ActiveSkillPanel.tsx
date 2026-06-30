@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   panel: {
     backgroundColor: 'rgba(10,10,20,0.96)',
     borderWidth: 2, borderColor: COLORS.neonCyan,
-    padding: 12, alignSelf: 'stretch',
+    padding: 12,
     maxWidth: 420, alignSelf: 'center', width: '100%',
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
