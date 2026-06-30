@@ -104,6 +104,22 @@ export const FACTION_PASSIVE: Record<FactionId, FactionPassive> = {
     glyph: '',
     color: '#888',
   },
+  npc_friendly: {
+    kind: 'none',
+    name: '—',
+    flavor: '',
+    effectText: '',
+    glyph: '',
+    color: '#cfd8dc',
+  },
+  boss: {
+    kind: 'none',
+    name: '—',
+    flavor: '',
+    effectText: '',
+    glyph: '',
+    color: '#ff4cd0',
+  },
 };
 
 export const SIGNATURE_BY_FACTION: Record<FactionId, EntitySignature> = {
@@ -158,6 +174,24 @@ export const SIGNATURE_BY_FACTION: Record<FactionId, EntitySignature> = {
     glyph: '⌬',
     color: '#5cb3ff',
   },
+  // NPC fallback — never deployed but kept for type safety.
+  npc_friendly: {
+    id: 'sig_operator_strike',
+    name: 'OPERATOR STRIKE',
+    flavor: 'Direct manual override. Rare but precise.',
+    power: 1.30,
+    glyph: '⌬',
+    color: '#cfd8dc',
+  },
+  // Boss fallback — never deployed but kept for type safety.
+  boss: {
+    id: 'sig_operator_strike',
+    name: 'OPERATOR STRIKE',
+    flavor: 'Direct manual override. Rare but precise.',
+    power: 1.30,
+    glyph: '⌬',
+    color: '#ff4cd0',
+  },
 };
 
 // ── ROLE TRAITS (5 roles) ──────────────────────────────────────────
@@ -210,6 +244,14 @@ export const TRAIT_BY_ROLE: Record<MinionRole, EntityTrait> = {
     effectText: 'First minion skill this fight deals +50% damage.',
     color: '#ff7aa8',
     glyph: '⌬',
+  },
+  swarm: {
+    id: 'trait_swarm',
+    name: 'SWARM',
+    flavor: 'Numbers over mass. Each hit stacks decay.',
+    effectText: 'Basic attacks apply a stacking 1-dmg bleed.',
+    color: '#9cff5c',
+    glyph: '⋄',
   },
 };
 
