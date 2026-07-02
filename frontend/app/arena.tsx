@@ -72,7 +72,7 @@ export default function ArenaScreen() {
       <View style={styles.header}>
         <PixelText size={9} color={COLORS.neonRed}>{'> OUTSIDE_ARENA_'}</PixelText>
         <PixelText size={22} color={COLORS.neonRed} glow bold>HORDE MODE</PixelText>
-        <PixelText size={9} color={COLORS.textDim} style={{ marginTop: 4 }}>"Survive. The Glitch never stops."</PixelText>
+        <PixelText size={9} color={COLORS.textDim} style={{ marginTop: 4 }}>{'"Survive. The Glitch never stops."'}</PixelText>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
