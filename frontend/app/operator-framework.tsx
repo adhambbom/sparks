@@ -113,6 +113,18 @@ export default function OperatorFrameworkScreen() {
 
   const selected = selectedNode ? SYNERGY_NODES.find((n) => n.id === selectedNode) ?? null : null;
 
+  // ── UNLOCK HANDLER ──────────────────────────────────────────────
+  // Spends 1 SP to jack in a node. On success play the level-up cue and
+  // persist; on rejection (no points / already owned) play the cancel cue.
+  const onUnlock = (id: string) => {
+    if (unlockSynergyNode(id)) {
+      sfx.levelUp();
+      void saveToServer();
+    } else {
+      sfx.cancel();
+    }
+  };
+
   // ── NOW it is safe to early-return: all hooks above are unconditional.
   if (!state || !player) {
     return (

@@ -64,7 +64,7 @@ export default function TitleScreen() {
 
         <View style={styles.titleWrap}>
           <PixelText size={12} color={COLORS.neonMagenta} bold style={{ marginBottom: 6 }}>
-            // BOOTING NEXUS_OS v.4.07 //
+            {'// BOOTING NEXUS_OS v.4.07 //'}
           </PixelText>
           <PixelText size={36} color={COLORS.neonCyan} glow bold style={styles.title}>
             SYNTHETIC

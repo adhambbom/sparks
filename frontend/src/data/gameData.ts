@@ -415,6 +415,12 @@ export type Enemy = {
   resist?: Element;
   tier: 1 | 2 | 3 | 4; // difficulty tier
   drops?: { itemId: string; chance: number }[];
+  /** Marks a unique elite. Drives boss-only combat framing + phases. */
+  isBoss?: boolean;
+  /** Ability ids unlocked when the boss enters its second phase. */
+  phaseAbilities?: string[];
+  /** Barked line shown when the boss transitions phases. */
+  phaseQuote?: string;
 };
 
 export const ENEMIES: Record<string, Enemy> = {
