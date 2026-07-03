@@ -415,6 +415,9 @@ export type Enemy = {
   resist?: Element;
   tier: 1 | 2 | 3 | 4; // difficulty tier
   drops?: { itemId: string; chance: number }[];
+  isBoss?: boolean;
+  phaseAbilities?: string[];
+  phaseQuote?: string;
 };
 
 export const ENEMIES: Record<string, Enemy> = {
