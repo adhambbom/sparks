@@ -321,7 +321,7 @@ export default function GameScreen() {
           if (!spot) break;
           occupied.add(`${spot.x},${spot.y}`);
           const enemyId = pool[Math.floor(Math.random() * pool.length)];
-          fresh.push({ uid: `r${Date.now()}_${i}_${Math.random()}`, enemyId, x: spot.x, y: spot.y });
+          fresh.push(makeAIRoamer(`r${Date.now()}_${i}_${Math.random()}`, enemyId, spot.x, spot.y, false));
         }
         roamersRef.current = fresh;
         setRoamers(fresh);

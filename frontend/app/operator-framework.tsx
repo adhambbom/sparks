@@ -113,6 +113,15 @@ export default function OperatorFrameworkScreen() {
 
   const selected = selectedNode ? SYNERGY_NODES.find((n) => n.id === selectedNode) ?? null : null;
 
+  const onUnlock = (id: string) => {
+    if (unlockSynergyNode(id)) {
+      sfx.levelUp();
+      void saveToServer();
+    } else {
+      sfx.cancel();
+    }
+  };
+
   // ── NOW it is safe to early-return: all hooks above are unconditional.
   if (!state || !player) {
     return (

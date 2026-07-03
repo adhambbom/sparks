@@ -104,6 +104,22 @@ export const FACTION_PASSIVE: Record<FactionId, FactionPassive> = {
     glyph: '',
     color: '#888',
   },
+  npc_friendly: {
+    kind: 'none',
+    name: '—',
+    flavor: '',
+    effectText: '',
+    glyph: '',
+    color: '#888',
+  },
+  boss: {
+    kind: 'none',
+    name: '—',
+    flavor: '',
+    effectText: '',
+    glyph: '',
+    color: '#888',
+  },
 };
 
 export const SIGNATURE_BY_FACTION: Record<FactionId, EntitySignature> = {
@@ -151,6 +167,24 @@ export const SIGNATURE_BY_FACTION: Record<FactionId, EntitySignature> = {
   },
   // Player fallback — never deployed but kept for type safety.
   player: {
+    id: 'sig_operator_strike',
+    name: 'OPERATOR STRIKE',
+    flavor: 'Direct manual override. Rare but precise.',
+    power: 1.30,
+    glyph: '⌬',
+    color: '#5cb3ff',
+  },
+  // Non-combatant / boss fallbacks — never deployed as party minions but
+  // kept for exhaustive-Record type safety.
+  npc_friendly: {
+    id: 'sig_operator_strike',
+    name: 'OPERATOR STRIKE',
+    flavor: 'Direct manual override. Rare but precise.',
+    power: 1.30,
+    glyph: '⌬',
+    color: '#5cb3ff',
+  },
+  boss: {
     id: 'sig_operator_strike',
     name: 'OPERATOR STRIKE',
     flavor: 'Direct manual override. Rare but precise.',
@@ -210,6 +244,14 @@ export const TRAIT_BY_ROLE: Record<MinionRole, EntityTrait> = {
     effectText: 'First minion skill this fight deals +50% damage.',
     color: '#ff7aa8',
     glyph: '⌬',
+  },
+  swarm: {
+    id: 'trait_swarm',
+    name: 'SWARM',
+    flavor: 'Fast, fragile, and numerous. Death by a thousand cuts.',
+    effectText: 'Rapid weak strikes apply stacking bleed.',
+    color: '#5cf7c4',
+    glyph: '◇',
   },
 };
 
