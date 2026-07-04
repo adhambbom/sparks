@@ -39,7 +39,7 @@ export default function StoreScreen() {
           <PixelText size={22} color={COLORS.neonYellow} glow bold>STORE</PixelText>
           <PixelText size={14} color={COLORS.neonYellow} bold>{player.gold}G</PixelText>
         </View>
-        <PixelText size={9} color={COLORS.textDim} style={{ marginTop: 4 }}>"Need an upgrade?" — Lyra</PixelText>
+        <PixelText size={9} color={COLORS.textDim} style={{ marginTop: 4 }}>{'"Need an upgrade?" — Lyra'}</PixelText>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
