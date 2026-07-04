@@ -625,7 +625,7 @@ export default function ConduitMazeScreen() {
 
       {/* ════════════ MISSION LINE ════════════ */}
       <View style={styles.missionStrip}>
-        <PixelText size={9} color={COLORS.neonMagenta}>// LEVEL 2B //  </PixelText>
+        <PixelText size={9} color={COLORS.neonMagenta}>{'// LEVEL 2B //  '}</PixelText>
         <PixelText size={9} color={COLORS.neonYellow} bold>{missionLine}</PixelText>
       </View>
 
