@@ -42,7 +42,7 @@ export class ErrorBoundary extends React.Component<
     return (
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.banner}>// SYSTEM FAULT //</Text>
+          <Text style={styles.banner}>{'// SYSTEM FAULT //'}</Text>
           <Text style={styles.title}>CRITICAL ERROR</Text>
           <Text style={styles.sub}>
             The Operator console encountered an unrecoverable exception.
