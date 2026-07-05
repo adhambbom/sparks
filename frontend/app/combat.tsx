@@ -495,9 +495,10 @@ export default function CombatScreen() {
   //                 mirroring Pokémon-style risk/reward.
   const playerQuarantine = (spikeId: string) => {
     if (busy) return;
+    if (!state) return;
     const spike = ITEMS[spikeId];
     if (!spike || spike.type !== 'spike') return;
-    const inv = state.player.inventory.find((i) => i.id === spikeId);
+    const inv = state.player.inventory.find((i: { id: string; qty: number }) => i.id === spikeId);
     if (!inv || inv.qty <= 0) {
       pushLog('No spikes left!');
       sfx.cancel();
@@ -1549,7 +1550,7 @@ export default function CombatScreen() {
         {/* ── QUARANTINE spike picker ─────────────────────────────────── */}
         {panel === 'spikes' && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
-            {player.inventory.filter(i => ITEMS[i.id]?.type === 'spike').map((inv) => {
+            {player.inventory.filter((i: { id: string; qty: number }) => ITEMS[i.id]?.type === 'spike').map((inv: { id: string; qty: number }) => {
               const it = ITEMS[inv.id];
               const mult = SPIKE_MULTIPLIER[inv.id] ?? 1.0;
               const preview = Math.round(Math.max(0.02, Math.min(0.98, 0.5 * mult * (1 - enemyHp / Math.max(1, enemyData.hp)))) * 100);
@@ -1566,7 +1567,7 @@ export default function CombatScreen() {
                 </TouchableOpacity>
               );
             })}
-            {player.inventory.filter(i => ITEMS[i.id]?.type === 'spike').length === 0 && (
+            {player.inventory.filter((i: { id: string; qty: number }) => ITEMS[i.id]?.type === 'spike').length === 0 && (
               <PixelText size={11} color={COLORS.textDim}>No containment spikes. Buy from Jax.</PixelText>
             )}
             <PixelButton title="✕" onPress={() => setPanel('main')} color={COLORS.textDim} size="sm" />
@@ -1821,7 +1822,7 @@ export default function CombatScreen() {
 
         {panel === 'skills' && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
-            {player.abilities.map((id) => {
+            {player.abilities.map((id: string) => {
               const ab = ABILITIES[id];
               if (!ab) return null;
               return (
@@ -1844,7 +1845,7 @@ export default function CombatScreen() {
 
         {panel === 'items' && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.skillsRow}>
-            {player.inventory.filter(i => ITEMS[i.id]?.type === 'consumable').map((inv) => {
+            {player.inventory.filter((i: { id: string; qty: number }) => ITEMS[i.id]?.type === 'consumable').map((inv: { id: string; qty: number }) => {
               const it = ITEMS[inv.id];
               return (
                 <TouchableOpacity
@@ -1859,7 +1860,7 @@ export default function CombatScreen() {
                 </TouchableOpacity>
               );
             })}
-            {player.inventory.filter(i => ITEMS[i.id]?.type === 'consumable').length === 0 && (
+            {player.inventory.filter((i: { id: string; qty: number }) => ITEMS[i.id]?.type === 'consumable').length === 0 && (
               <PixelText size={11} color={COLORS.textDim}>No usable items.</PixelText>
             )}
             <PixelButton title="✕" onPress={() => setPanel('main')} color={COLORS.textDim} size="sm" />

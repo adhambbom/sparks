@@ -95,6 +95,8 @@ export const PROP_RULES: Record<CyberPropKind, TileRule> = {
   'generator':          { category: 'PROP_LARGE', walkable: false, debugColor: 'rgba(0,200,255,0.45)',  debugLabel: '⚙' },
   'terminal':           { category: 'INTERACTABLE', walkable: false, debugColor: 'rgba(0,220,255,0.55)', debugLabel: '⌬' },
   'gate-locked':        { category: 'INTERACTABLE', walkable: false, debugColor: 'rgba(255,40,40,0.55)', debugLabel: '🔒' },
+  'crate':              { category: 'PROP_LARGE', walkable: false, debugColor: 'rgba(255,180,40,0.45)', debugLabel: '▢' },
+  'fence':              { category: 'PROP_LARGE', walkable: false, debugColor: 'rgba(180,180,180,0.45)', debugLabel: '#' },
 };
 
 // Reverse-lookup map at module load — props at (x,y) by tile key.
